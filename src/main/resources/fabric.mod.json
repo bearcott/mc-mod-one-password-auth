@@ -1,0 +1,19 @@
+{
+	"schemaVersion": 1,
+	"id": "one-password-auth-mod",
+	"version": "${version}",
+	"name": "Example mod",
+	"description": "Server-side requires everyone to enter a password before joining.",
+	"icon": "assets/modid/icon.png",
+	"entrypoints": {
+		"main": [
+			"net.example.auth.PasswordMod"
+		]
+	},
+	"depends": {
+		"fabricloader": ">=0.18.2",
+		"minecraft": "~1.21.11",
+		"java": ">=21",
+		"fabric-api": "*"
+	}
+}
