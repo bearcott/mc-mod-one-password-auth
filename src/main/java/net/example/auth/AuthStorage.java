@@ -11,7 +11,8 @@ public class AuthStorage {
 
     private static final Set<String> whitelistedIPs = new HashSet<>();
     public static String serverPassword = "PASSSWORDHERE";
-    public static String webhookUrl = ""; // Leave empty by default
+    public static String webhookUrl = "";
+    public static String adminWebhookUrl = "";
 
     public static void load() {
         try {
@@ -20,9 +21,11 @@ public class AuthStorage {
                 props.load(Files.newInputStream(CONFIG_PATH));
                 serverPassword = props.getProperty("password", "PASSSWORDHERE");
                 webhookUrl = props.getProperty("webhook_url", "");
+                adminWebhookUrl = props.getProperty("admin_webhook_url", "");
             } else {
                 props.setProperty("password", "PASSSWORDHERE");
                 props.setProperty("webhook_url", "");
+                props.setProperty("admin_webhook_url", "");
                 props.store(Files.newOutputStream(CONFIG_PATH), "Auth Mod Config");
             }
         } catch (IOException e) { e.printStackTrace(); }
