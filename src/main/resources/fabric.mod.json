@@ -3,7 +3,7 @@
 	"id": "one-password-auth-mod",
 	"version": "${version}",
 	"name": "Example mod",
-	"description": "Server-side requires everyone to enter a password before joining.",
+	"description": "Server-side plugin that requires everyone to enter a password before joining.",
 	"icon": "assets/modid/icon.png",
 	"entrypoints": {
 		"main": [

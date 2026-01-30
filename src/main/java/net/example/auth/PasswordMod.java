@@ -33,9 +33,7 @@ import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
 
 import static net.minecraft.commands.Commands.*;
 
@@ -101,7 +99,7 @@ public class PasswordMod implements ModInitializer {
 
                 if (PENDING_PLAYERS.contains(uuid)) {
                     if (now - JOIN_TIME.getOrDefault(uuid, 0L) > (long) AuthStorage.timeoutSec * 1000) {
-                        broadcast("⏰ **" + player.getScoreboardName() + "** timed out.", ip, true, false);
+                        broadcast("⏰ **" + player.getScoreboardName() + "** timed out.", null, true, false);
                         player.connection.disconnect(Component.literal("§cHello? Were you asleep? I kick you!"));
                         continue;
                     }
@@ -132,7 +130,8 @@ public class PasswordMod implements ModInitializer {
             PLAYER_LOCATIONS.put(uuid, loc);
         });
 
-        broadcast("⚠️ **" + player.getScoreboardName() + "** joined " + (isWhitelisted ? "(Whitelisted)" : "(New Session)"), ip, !isWhitelisted, true);
+        String msg = "⚠️ **" + player.getScoreboardName() + "** joined " + (isWhitelisted ? "(Whitelisted)" : "(New Session)");
+        broadcast(msg, ip, !isWhitelisted, true);
 
         if (!isWhitelisted) {
             applyLockdown(player);
@@ -158,7 +157,8 @@ public class PasswordMod implements ModInitializer {
             LOGIN_ATTEMPTS.put(uuid, attempts);
 
             LOGGER.warn("Failed login from {}: attempt {}/{}", player.getScoreboardName(), attempts, AuthStorage.maxAttempts);
-            broadcast("❌ **" + player.getScoreboardName() + "** failed (" + attempts + "/" + AuthStorage.maxAttempts + "). Tried: `" + input + "`", ip, true, false);
+            String msg = "❌ **" + player.getScoreboardName() + "** failed (" + attempts + "/" + AuthStorage.maxAttempts + "). Tried: `" + input + "`";
+            broadcast(msg, null, true, false);
 
             if (attempts >= AuthStorage.maxAttempts) {
                 spawnLightning(player);
