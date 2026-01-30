@@ -15,7 +15,6 @@ public class AuthStorage {
     public static String serverPassword;
     public static String webhookUrl;
     public static String adminWebhookUrl;
-    public static int maxAttempts;
     public static int timeoutSec;
 
     public static void load() {
@@ -25,7 +24,6 @@ public class AuthStorage {
         props.setProperty("password", "");
         props.setProperty("webhook_url", "");
         props.setProperty("admin_webhook_url", "");
-        props.setProperty("max_attempts", "5");
         props.setProperty("timeout_seconds", "180");
 
         // 2. Load or Create File
@@ -44,9 +42,6 @@ public class AuthStorage {
             serverPassword = props.getProperty("password");
             webhookUrl = props.getProperty("webhook_url");
             adminWebhookUrl = props.getProperty("admin_webhook_url");
-
-            // We use a helper to prevent crashes if a user types "abc" in the config
-            maxAttempts = tryParse(props.getProperty("max_attempts"), 5);
             timeoutSec = tryParse(props.getProperty("timeout_seconds"), 180);
 
         } catch (IOException e) {

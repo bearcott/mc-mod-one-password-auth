@@ -40,6 +40,7 @@ import static net.minecraft.commands.Commands.*;
 public class PasswordMod implements ModInitializer {
     public static final Logger LOGGER = LoggerFactory.getLogger("Auth");
     private static final String TAG_PREFIX = "one_password_auth_mod_gamemode_";
+    public static final Integer MAX_ATTEMPTS = 7;
 
     public static final Set<UUID> PENDING_PLAYERS = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private static final Map<UUID, Vec3> JOIN_POSITIONS = new ConcurrentHashMap<>();
@@ -156,14 +157,15 @@ public class PasswordMod implements ModInitializer {
             int attempts = LOGIN_ATTEMPTS.getOrDefault(uuid, 0) + 1;
             LOGIN_ATTEMPTS.put(uuid, attempts);
 
-            LOGGER.warn("Failed login from {}: attempt {}/{}", player.getScoreboardName(), attempts, AuthStorage.maxAttempts);
-            String msg = "❌ **" + player.getScoreboardName() + "** failed (" + attempts + "/" + AuthStorage.maxAttempts + "). Tried: `" + input + "`";
+            LOGGER.warn("Failed login from {}: attempt {}/{}", player.getScoreboardName(), attempts, MAX_ATTEMPTS);
+            String msg = "❌ **" + player.getScoreboardName() + "** failed (" + attempts + "/" + MAX_ATTEMPTS + "). Tried: `" + input + "`";
             broadcast(msg, null, true, false);
 
-            if (attempts >= AuthStorage.maxAttempts) {
+            if (attempts >= MAX_ATTEMPTS) {
                 spawnLightning(player);
                 playSound(player, SoundEvents.GENERIC_EXPLODE, 1.0f);
                 spawnEffect(player, ParticleTypes.EXPLOSION, 5);
+
                 Location loc = PLAYER_LOCATIONS.getOrDefault(uuid, Location.unknown());
                 player.connection.disconnect(Component.literal("§4§lTERMINATED. §cGo back to " + loc.city() + "! You are not welcome! Go touch grass!"));
             } else {
@@ -242,13 +244,26 @@ public class PasswordMod implements ModInitializer {
     }
 
     private String getSassyMessage(int attempt, String input) {
-        String prefix = "§e§l[failed " + attempt + "/" + AuthStorage.maxAttempts + "] §f";
-        if (input.equalsIgnoreCase("password123")) return prefix + "Aw come on, you really thought that would work??";
+        String prefix = "§e§l[failed " + attempt + "/" + MAX_ATTEMPTS + "] §f";
         return switch (attempt) {
             case 1 -> prefix + "Uh oh! Did you forget your own password? Try again.";
-            case 2 -> prefix + "Is this a new server? Try \"§d§lpassword123§f\"";
-            case 3 -> prefix + "Maybe try looking at the keyboard next time?";
-            case 4 -> prefix + "Yikes, at this point I think you should just give up...";
+            case 2 -> prefix + "Is this a new server? Try \"§d§lPassWord123§f\"";
+            case 3 -> {
+                if (input.equals("PassWord123")) {
+                    yield prefix + "Aw come on, you really thought that would work??";
+                } else {
+                    yield prefix + "Maybe try looking at the keyboard next time?";
+                }
+            }
+            case 4 -> "§a§lSuccess!§r Please solve the captcha: §d§lWhat is 48+19?§f";
+            case 5 -> {
+                if (input.trim().equals("67")) {
+                    yield prefix + "You thought that was gonna get you in?? Math??";
+                } else {
+                    yield prefix + "...Do you not know how to do addition or something?";
+                }
+            }
+            case 6 -> prefix + "You're a failure. That's so sad.";
             default -> prefix;
         };
     }
