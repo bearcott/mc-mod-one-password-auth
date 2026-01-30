@@ -41,10 +41,10 @@ import static net.minecraft.commands.Commands.*;
 
 public class PasswordMod implements ModInitializer {
     public static final Logger LOGGER = LoggerFactory.getLogger("Auth");
+    private static final String TAG_PREFIX = "one_password_auth_mod_gamemode_";
 
     public static final Set<UUID> PENDING_PLAYERS = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private static final Map<UUID, Vec3> JOIN_POSITIONS = new ConcurrentHashMap<>();
-    private static final Map<UUID, GameType> PREVIOUS_MODES = new ConcurrentHashMap<>();
     private static final Map<UUID, Integer> LOGIN_ATTEMPTS = new ConcurrentHashMap<>();
     private static final Map<UUID, Long> LAST_COMMAND_TIME = new ConcurrentHashMap<>();
     private static final Map<UUID, Long> JOIN_TIME = new ConcurrentHashMap<>();
@@ -52,9 +52,6 @@ public class PasswordMod implements ModInitializer {
 
     private static final ExecutorService HTTP_EXECUTOR = Executors.newFixedThreadPool(2);
 
-    /**
-     * Corrected indices for CSV: [0] = City, [1] = Country
-     */
     public record Location(String city, String country) {
         public String full() { return city + ", " + country; }
         public static Location unknown() { return new Location("Unknown", "Location"); }
@@ -64,6 +61,9 @@ public class PasswordMod implements ModInitializer {
     @Override
     public void onInitialize() {
         AuthStorage.load();
+
+        // log server start and shutdown to discord
+        ServerStatusLogger.register();
 
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> handlePlayerJoin(handler.getPlayer()));
 
@@ -90,15 +90,24 @@ public class PasswordMod implements ModInitializer {
 
             for (ServerPlayer player : players) {
                 UUID uuid = player.getUUID();
+                String ip = player.getIpAddress();
+
+                if (AuthStorage.isAuthed(ip)) {
+                    if (PENDING_PLAYERS.contains(uuid)) {
+                        liftLockdown(player); // Cleanly restore them if IP matches
+                    }
+                    continue;
+                }
+
                 if (PENDING_PLAYERS.contains(uuid)) {
                     if (now - JOIN_TIME.getOrDefault(uuid, 0L) > (long) AuthStorage.timeoutSec * 1000) {
-                        broadcast("⏰ **" + player.getScoreboardName() + "** timed out.", player.getIpAddress(), true, false);
-                        player.connection.disconnect(Component.literal("§cI kick you! Were you asleep?"));
+                        broadcast("⏰ **" + player.getScoreboardName() + "** timed out.", ip, true, false);
+                        player.connection.disconnect(Component.literal("§cHello? Were you asleep? I kick you!"));
                         continue;
                     }
                     if (server.getTickCount() % 80 == 0) sendAuthTitle(player);
                     restrictMovement(player);
-                } else if (!AuthStorage.isAuthed(player.getIpAddress()) && player.isAlive()) {
+                } else if (player.isAlive()) {
                     applyLockdown(player);
                 }
             }
@@ -141,9 +150,9 @@ public class PasswordMod implements ModInitializer {
             AuthStorage.saveIP(ip);
             liftLockdown(player);
 
-            playSound(player, SoundEvents.BELL_RESONATE, 1.0f);
+            playSound(player, SoundEvents.PLAYER_LEVELUP, 1.0f);
             spawnEffect(player, ParticleTypes.TOTEM_OF_UNDYING, 20);
-            player.sendSystemMessage(Component.literal("§a§lAuthenticated!§r§d May GulaGod bless you."));
+            player.sendSystemMessage(Component.literal("§a§lAuthenticated!§r May GulaGod bless you."));
         } else {
             int attempts = LOGIN_ATTEMPTS.getOrDefault(uuid, 0) + 1;
             LOGIN_ATTEMPTS.put(uuid, attempts);
@@ -155,7 +164,6 @@ public class PasswordMod implements ModInitializer {
                 spawnLightning(player);
                 playSound(player, SoundEvents.GENERIC_EXPLODE, 1.0f);
                 spawnEffect(player, ParticleTypes.EXPLOSION, 5);
-
                 Location loc = PLAYER_LOCATIONS.getOrDefault(uuid, Location.unknown());
                 player.connection.disconnect(Component.literal("§4§lTERMINATED. §cGo back to " + loc.city() + "! You are not welcome! Go touch grass!"));
             } else {
@@ -179,7 +187,6 @@ public class PasswordMod implements ModInitializer {
                 String line = in.readLine();
                 if (line != null && line.contains(",")) {
                     String[] parts = line.split(",");
-                    // for some reason, index of city = 1, country = 0
                     return new Location(parts[1].trim(), parts[0].trim());
                 }
             } finally {
@@ -245,14 +252,18 @@ public class PasswordMod implements ModInitializer {
             default -> "§4§l[FINAL ATTEMPT] §fGoodbye, subject.";
         };
     }
-
     private void applyLockdown(ServerPlayer player) {
         UUID uuid = player.getUUID();
+        if (PENDING_PLAYERS.contains(uuid)) return;
 
-        // Only save the mode if the player isn't already trapped in lockdown
-        if (!PENDING_PLAYERS.contains(uuid)) {
+        // 1. Check if we already have a saved mode tag (from a previous crashed session)
+        boolean hasSavedTag = player.getTags().stream().anyMatch(t -> t.startsWith(TAG_PREFIX));
+
+        // 2. Only save the current mode if we DON'T have a tag yet.
+        // This prevents overwriting "Creative" with "Spectator" if the method runs twice.
+        if (!hasSavedTag) {
             GameType current = player.gameMode.getGameModeForPlayer();
-            PREVIOUS_MODES.put(uuid, current);
+            player.addTag(TAG_PREFIX + current.getName()); // e.g., "auth_mode_creative"
         }
 
         JOIN_POSITIONS.put(uuid, player.position());
@@ -270,12 +281,33 @@ public class PasswordMod implements ModInitializer {
     }
 
     private void liftLockdown(ServerPlayer player) {
-        // Restore whatever was captured, defaulting to Survival if nothing found
-        GameType original = PREVIOUS_MODES.getOrDefault(player.getUUID(), GameType.SURVIVAL);
-        player.setGameMode(original);
+        // 1. Find the tag
+        String savedModeName = null;
+        for (String tag : player.getTags()) {
+            if (tag.startsWith(TAG_PREFIX)) {
+                savedModeName = tag.replace(TAG_PREFIX, "");
+                break;
+            }
+        }
 
+        // 2. Determine Mode (Default to Survival if tag is missing or invalid)
+        GameType restoreMode = GameType.SURVIVAL;
+        if (savedModeName != null) {
+            // "survival", "creative", "adventure", "spectator"
+            for (GameType gt : GameType.values()) {
+                if (gt.getName().equalsIgnoreCase(savedModeName)) {
+                    restoreMode = gt;
+                    break;
+                }
+            }
+            // Remove the tag so we don't carry it forever
+            player.removeTag(TAG_PREFIX + savedModeName);
+        }
+
+        player.setGameMode(restoreMode);
         player.setInvulnerable(false);
         player.removeEffect(MobEffects.BLINDNESS);
+
         player.connection.send(new ClientboundSetTitleTextPacket(Component.literal("")));
         player.connection.send(new ClientboundSetSubtitleTextPacket(Component.literal("")));
         cleanup(player.getUUID());
@@ -306,7 +338,6 @@ public class PasswordMod implements ModInitializer {
         PENDING_PLAYERS.remove(uuid);
         JOIN_POSITIONS.remove(uuid);
         LOGIN_ATTEMPTS.remove(uuid);
-        PREVIOUS_MODES.remove(uuid);
         LAST_COMMAND_TIME.remove(uuid);
         JOIN_TIME.remove(uuid);
         PLAYER_LOCATIONS.remove(uuid);
