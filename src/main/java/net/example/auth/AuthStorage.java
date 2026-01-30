@@ -10,39 +10,72 @@ public class AuthStorage {
     private static final Path IP_PATH = FabricLoader.getInstance().getConfigDir().resolve("ip_whitelist.txt");
 
     private static final Set<String> whitelistedIPs = new HashSet<>();
-    public static String serverPassword = "PASSSWORDHERE";
-    public static String webhookUrl = "";
-    public static String adminWebhookUrl = "";
+
+    // Default values are now only defined in the load() method or here
+    public static String serverPassword;
+    public static String webhookUrl;
+    public static String adminWebhookUrl;
+    public static int maxAttempts;
+    public static int timeoutSec;
 
     public static void load() {
-        try {
-            Properties props = new Properties();
-            if (Files.exists(CONFIG_PATH)) {
-                props.load(Files.newInputStream(CONFIG_PATH));
-                serverPassword = props.getProperty("password", "PASSSWORDHERE");
-                webhookUrl = props.getProperty("webhook_url", "");
-                adminWebhookUrl = props.getProperty("admin_webhook_url", "");
-            } else {
-                props.setProperty("password", "PASSSWORDHERE");
-                props.setProperty("webhook_url", "");
-                props.setProperty("admin_webhook_url", "");
-                props.store(Files.newOutputStream(CONFIG_PATH), "Auth Mod Config");
-            }
-        } catch (IOException e) { e.printStackTrace(); }
+        Properties props = new Properties();
 
+        // 1. Set Defaults
+        props.setProperty("password", "");
+        props.setProperty("webhook_url", "");
+        props.setProperty("admin_webhook_url", "");
+        props.setProperty("max_attempts", "5");
+        props.setProperty("timeout_seconds", "180");
+
+        // 2. Load or Create File
+        try {
+            if (Files.exists(CONFIG_PATH)) {
+                try (InputStream is = Files.newInputStream(CONFIG_PATH)) {
+                    props.load(is);
+                }
+            } else {
+                try (OutputStream os = Files.newOutputStream(CONFIG_PATH)) {
+                    props.store(os, "Auth Mod Config");
+                }
+            }
+
+            // 3. Assign Variables (The only place defaults are referenced is props.getProperty)
+            serverPassword = props.getProperty("password");
+            webhookUrl = props.getProperty("webhook_url");
+            adminWebhookUrl = props.getProperty("admin_webhook_url");
+
+            // We use a helper to prevent crashes if a user types "abc" in the config
+            maxAttempts = tryParse(props.getProperty("max_attempts"), 5);
+            timeoutSec = tryParse(props.getProperty("timeout_seconds"), 180);
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        // 4. Load IP Whitelist
         if (Files.exists(IP_PATH)) {
-            try (BufferedReader reader = Files.newBufferedReader(IP_PATH)) {
-                String line;
-                while ((line = reader.readLine()) != null) whitelistedIPs.add(line.trim());
+            try {
+                whitelistedIPs.addAll(Files.readAllLines(IP_PATH));
             } catch (IOException e) { e.printStackTrace(); }
         }
     }
 
     public static void saveIP(String ip) {
-        whitelistedIPs.add(ip);
-        try { Files.write(IP_PATH, whitelistedIPs, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING); }
-        catch (IOException e) { e.printStackTrace(); }
+        if (whitelistedIPs.add(ip)) { // Only write if the IP is actually new
+            try {
+                Files.write(IP_PATH, whitelistedIPs, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+            } catch (IOException e) { e.printStackTrace(); }
+        }
     }
 
-    public static boolean isAuthed(String ip) { return whitelistedIPs.contains(ip); }
+    public static boolean isAuthed(String ip) {
+        return whitelistedIPs.contains(ip);
+    }
+
+    // Helper to keep the load() method clean
+    private static int tryParse(String val, int defaultVal) {
+        try { return Integer.parseInt(val); }
+        catch (NumberFormatException e) { return defaultVal; }
+    }
 }
