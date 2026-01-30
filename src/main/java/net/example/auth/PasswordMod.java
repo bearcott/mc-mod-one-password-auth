@@ -249,7 +249,7 @@ public class PasswordMod implements ModInitializer {
             case 2 -> prefix + "Is this a new server? Try \"§d§lpassword123§f\"";
             case 3 -> prefix + "Maybe try looking at the keyboard next time?";
             case 4 -> prefix + "Yikes, at this point I think you should just give up...";
-            default -> "§4§l[FINAL ATTEMPT] §fGoodbye, subject.";
+            default -> prefix;
         };
     }
     private void applyLockdown(ServerPlayer player) {
