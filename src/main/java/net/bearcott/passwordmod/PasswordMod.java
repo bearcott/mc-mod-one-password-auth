@@ -76,14 +76,16 @@ public class PasswordMod implements ModInitializer {
 
                 AuthStorage.PlayerSession session = AuthStorage.getPendingSession(player.getUUID());
 
+                // If are whitelisted, ignore the rest
+                if (AuthStorage.isWhitelisted(player.getIpAddress())) {
+                    // If they somehow still have the lockdown, lift it
+                    if (session != null)
+                        PlayerHandlers.liftLockdown(player);
+                    continue;
+                }
+
                 // Logic for players in lockdown
                 if (session != null) {
-                    // If they are on the IP whitelist, lift any existing lockdown
-                    if (AuthStorage.isWhitelisted(player.getIpAddress())) {
-                        PlayerHandlers.liftLockdown(player);
-                        continue;
-                    }
-
                     // kick if they exceed the timeout limit since joining or last attempt
                     if (System.currentTimeMillis() - session.lastAttemptTime > (long) AuthStorage.timeoutSec * 1000) {
                         Notifications.broadcast(Messages.timeoutBroadcast(player.getScoreboardName()), null, true,
@@ -98,6 +100,7 @@ public class PasswordMod implements ModInitializer {
 
                     PlayerHandlers.restrictMovement(player);
                 }
+
                 // If they have no session at all and aren't whitelisted, apply it
                 else if (session == null && player.isAlive()) {
                     PlayerHandlers.applyLockdown(player);

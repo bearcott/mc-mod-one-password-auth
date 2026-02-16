@@ -22,7 +22,7 @@ public class Notifications {
             try {
                 Helpers.Location loc = (ip != null) ? Helpers.fetchLocationData(ip) : null;
                 String content = message
-                        + (loc != null && ip != null ? " \n📍 IP: `" + ip + "` (" + loc.full() + ")" : "");
+                        + (loc != null && ip != null ? "\\n📍 IP: `" + ip + "` (" + loc.full() + ")" : "");
                 String body = "{\"content\": \"" + content.replace("\"", "\\\"") + "\"}";
                 sendDiscordWebhookSync(target, body);
             } catch (Exception ignored) {
@@ -32,6 +32,7 @@ public class Notifications {
         if (workerPool != null)
             workerPool.submit(send);
         else
+            // TODO: better handling of null workerPool
             send.run();
     }
 

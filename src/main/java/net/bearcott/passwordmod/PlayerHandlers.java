@@ -31,22 +31,25 @@ public class PlayerHandlers {
         UUID uuid = player.getUUID();
         boolean isWhitelisted = AuthStorage.isWhitelisted(ip);
 
-        // get their location to BM them if they get kicked from server
-        if (workerPool != null)
-            workerPool.submit(() -> {
-                Helpers.Location loc = Helpers.fetchLocationData(ip);
-                AuthStorage.PlayerSession s = AuthStorage.getPendingSession(uuid);
-                if (s != null)
-                    s.location = loc;
-            });
-
         String msg = "⚠️ **" + player.getScoreboardName() + "** joined "
                 + (isWhitelisted ? "(Whitelisted)" : "(New Session)");
-        Notifications.broadcast(msg, ip, !isWhitelisted, true, PasswordMod.WORKER_POOL);
+        Notifications.broadcast(msg, ip, !isWhitelisted, true, workerPool);
 
         if (!isWhitelisted) {
             applyLockdown(player);
             Cosmetics.playSound(player, net.minecraft.sounds.SoundEvents.WITHER_SPAWN, 0.5f);
+
+            // get their location to BM them if they get kicked from server
+            // TODO: location is currently only used for message on login kick
+            if (workerPool != null)
+                workerPool.submit(() -> {
+                    Helpers.Location loc = Helpers.fetchLocationData(ip);
+                    // the session should exist after applyLockdown() since player is not
+                    // whitelisted
+                    // TODO: fix this bad design
+                    AuthStorage.PlayerSession s = AuthStorage.getPendingSession(uuid);
+                    s.location = loc;
+                });
         }
     }
 
@@ -75,7 +78,7 @@ public class PlayerHandlers {
             // notifications
             PasswordMod.LOGGER.info("✅ {} logged in.", player.getScoreboardName());
             Notifications.broadcast(Messages.authSuccess(player.getScoreboardName()), null, true, false,
-                    workerPool != null ? workerPool : PasswordMod.WORKER_POOL);
+                    workerPool);
             player.sendSystemMessage(Component.literal("§a§lAuthenticated!§r May GulaGod bless you."));
         } else {
             session.loginAttempts = session.loginAttempts + 1;
@@ -85,8 +88,8 @@ public class PlayerHandlers {
                 Cosmetics.playSound(player, net.minecraft.sounds.SoundEvents.DRAGON_FIREBALL_EXPLODE, 1.0f);
                 Cosmetics.spawnEffect(player, ParticleTypes.EXPLOSION, 5);
 
-                Helpers.Location loc = (session != null && session.location != null) ? session.location
-                        : Helpers.Location.unknown();
+                // TODO: better fetching and storing of player location name
+                Helpers.Location loc = session.location;
                 player.connection.disconnect(Component.literal(Messages.terminatedDisconnect(loc.city())));
             } else {
                 Cosmetics.playSound(player, net.minecraft.sounds.SoundEvents.CREEPER_PRIMED, 1.2f);
@@ -99,12 +102,15 @@ public class PlayerHandlers {
             String msg = "❌ **" + player.getScoreboardName() + "** failed (" + session.loginAttempts + "/"
                     + PasswordMod.MAX_ATTEMPTS
                     + "). Tried: `" + input + "`";
-            Notifications.broadcast(msg, null, true, false, workerPool != null ? workerPool : PasswordMod.WORKER_POOL);
+            Notifications.broadcast(msg, null, true, false, workerPool);
         }
     }
 
     public static void createPendingPlayerSession(ServerPlayer player) {
         UUID uuid = player.getUUID();
+
+        if (AuthStorage.hasPendingSession(uuid))
+            return;
 
         if (player.level() instanceof ServerLevel sl) {
             PlayerList playerList = sl.getServer().getPlayerList();
@@ -122,14 +128,12 @@ public class PlayerHandlers {
             }
 
             // create the player session
-            if (!AuthStorage.hasPendingSession(uuid)) {
-                AuthStorage.getOrCreatePendingPlayerSession(
-                        uuid,
-                        player.gameMode.getGameModeForPlayer(),
-                        isOp,
-                        level,
-                        player.position());
-            }
+            AuthStorage.getOrCreatePendingPlayerSession(
+                    uuid,
+                    player.gameMode.getGameModeForPlayer(),
+                    isOp,
+                    level,
+                    player.position());
         } else {
             player.sendSystemMessage(Component.literal(Messages.FATAL_ERROR));
         }
@@ -138,9 +142,10 @@ public class PlayerHandlers {
     public static void applyLockdown(ServerPlayer player) {
         UUID uuid = player.getUUID();
         if (AuthStorage.hasPendingSession(uuid)) {
-            // if the session already exists, reset their join time and attempt counters
+            // if the session already exists, only reset their timeout
             AuthStorage.PlayerSession session = AuthStorage.getPendingSession(uuid);
             session.lastAttemptTime = System.currentTimeMillis();
+            session.loginAttempts = 0;
             return;
         }
 
@@ -160,11 +165,9 @@ public class PlayerHandlers {
     public static void liftLockdown(ServerPlayer player) {
         UUID uuid = player.getUUID();
 
-        // TODO: Is this ever necessary? How to ensure session exists
-        if (!AuthStorage.hasPendingSession(uuid)) {
-            player.sendSystemMessage(Component.literal(Messages.FATAL_ERROR));
+        // TODO: more elegant way of checking if exists
+        if (!AuthStorage.hasPendingSession(uuid))
             return;
-        }
 
         AuthStorage.PlayerSession session = AuthStorage.getPendingSession(uuid);
 
