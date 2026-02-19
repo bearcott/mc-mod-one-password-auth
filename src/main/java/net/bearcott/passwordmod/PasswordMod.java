@@ -80,28 +80,33 @@ public class PasswordMod implements ModInitializer {
                 if (AuthStorage.isWhitelisted(player.getIpAddress())) {
                     // If they somehow still have the lockdown, lift it
                     if (session != null)
-                        PlayerHandlers.liftLockdown(player);
+                        PlayerHandlers.liftLockdown(player, session);
                     continue;
                 }
 
                 // Logic for players in lockdown
                 if (session != null) {
                     // kick if they exceed the timeout limit since joining or last attempt
-                    if (System.currentTimeMillis() - session.lastAttemptTime > (long) AuthStorage.timeoutSec * 1000) {
+                    if (System.currentTimeMillis() - session.lastAttemptTime > AuthStorage.timeoutSec * 1000) {
+                        player.connection.disconnect(Component.literal(Messages.TIMEOUT_DISCONNECT));
+
                         Notifications.broadcast(Messages.timeoutBroadcast(player.getScoreboardName()), null, true,
                                 false, WORKER_POOL);
-                        player.connection.disconnect(Component.literal(Messages.TIMEOUT_DISCONNECT));
                         continue;
                     }
+
+                    // handle ticked kicks (for visual effects)
+                    session.kickPlayerIfTickDelayed(player);
 
                     // Periodic visual reminders
                     if (server.getTickCount() % 80 == 0)
                         Cosmetics.sendAuthTitle(player);
 
-                    PlayerHandlers.restrictMovement(player);
+                    // hold all pending players in place
+                    PlayerHandlers.restrictMovement(player, session);
                 }
 
-                // If they have no session at all and aren't whitelisted, apply it
+                // If they have no session at all and aren't whitelisted, apply lockdown
                 else if (session == null && player.isAlive()) {
                     PlayerHandlers.applyLockdown(player);
                 }
@@ -112,12 +117,10 @@ public class PasswordMod implements ModInitializer {
             ServerPlayer player = handler.getPlayer();
             UUID uuid = player.getUUID();
 
-            // Check session state for notification type
+            // Notify the reason for disconnect
             boolean wasPending = AuthStorage.hasPendingSession(uuid);
-
             String msg = wasPending ? Messages.disconnectFailed(player.getScoreboardName())
                     : Messages.disconnectLeft(player.getScoreboardName());
-
             Notifications.broadcast(msg, null, wasPending, true, WORKER_POOL);
         });
     }

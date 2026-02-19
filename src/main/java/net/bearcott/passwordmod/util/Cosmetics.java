@@ -2,6 +2,7 @@ package net.bearcott.passwordmod.util;
 
 import net.minecraft.core.Holder;
 import net.minecraft.core.particles.ParticleOptions;
+import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.network.protocol.game.*;
@@ -11,6 +12,17 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LightningBolt;
 
 public class Cosmetics {
+    public static void startKickPlayerEffects(ServerPlayer player) {
+        Cosmetics.spawnLightning(player);
+        Cosmetics.playSound(player, net.minecraft.sounds.SoundEvents.DRAGON_FIREBALL_EXPLODE, 1.0f);
+        Cosmetics.spawnEffect(player, ParticleTypes.EXPLOSION, 5);
+    }
+
+    public static void loginSuccessEffects(ServerPlayer player) {
+        Cosmetics.playSound(player, net.minecraft.sounds.SoundEvents.PLAYER_LEVELUP, 1.0f);
+        Cosmetics.spawnEffect(player, ParticleTypes.TOTEM_OF_UNDYING, 20);
+    }
+
     public static void playSound(ServerPlayer p, SoundEvent s, float pitch) {
         p.connection.send(new ClientboundSoundPacket(Holder.direct(s), SoundSource.MASTER, p.getX(), p.getY(), p.getZ(),
                 1.0f, pitch, p.getRandom().nextLong()));
@@ -33,10 +45,16 @@ public class Cosmetics {
     public static void sendAuthTitle(ServerPlayer player) {
         player.connection.send(new ClientboundSetTitlesAnimationPacket(10, 70, 20));
         player.connection.send(new ClientboundSetTitleTextPacket(
-                net.minecraft.network.chat.Component.literal("§6§lWelcome and Incredible!")));
+                net.minecraft.network.chat.Component.literal(Messages.WELCOME_MESSAGE_TITLE)));
         player.connection.send(new ClientboundSetSubtitleTextPacket(
-                net.minecraft.network.chat.Component.literal("§7Identify yourself or perish.")));
+                net.minecraft.network.chat.Component.literal(Messages.WELCOME_MESSAGE_SUBTITLE)));
         player.connection.send(new ClientboundSetActionBarTextPacket(
-                net.minecraft.network.chat.Component.literal("§eType §f/login <password> §eto join")));
+                net.minecraft.network.chat.Component.literal(Messages.WELCOME_MESSAGE_ACTION_BAR)));
+    }
+
+    public static void resetTitle(ServerPlayer player) {
+        player.connection.send(new ClientboundSetTitleTextPacket(net.minecraft.network.chat.Component.literal("")));
+        player.connection.send(new ClientboundSetSubtitleTextPacket(net.minecraft.network.chat.Component.literal("")));
+        player.connection.send(new ClientboundSetActionBarTextPacket(net.minecraft.network.chat.Component.literal("")));
     }
 }

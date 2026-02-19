@@ -6,6 +6,7 @@ public class Messages {
     public static final String TIMEOUT_DISCONNECT = "§cHello? Were you asleep? I kick you!";
     public static final String RATE_LIMITED = "§cTry again in a moment...";
     public static final String FATAL_ERROR = "§cUh Oh! Something went wrong, please contact an admin...";
+    public static final String AUTHENTICATED_MESSAGE = "§a§lAuthenticated!§r May GulaGod bless you.";
 
     public static String authSuccess(String name) {
         return "✅ **" + name + "** authenticated successfully.";
@@ -26,6 +27,15 @@ public class Messages {
     public static String disconnectLeft(String name) {
         return "🔌 **" + name + "** left.";
     }
+
+    public static String welcomeBack(String name, int opLevel) {
+        return "§b[Security]§r Welcome back comrade " + name
+                + "! Lvl " + opLevel + " OP restored.";
+    }
+
+    public static final String WELCOME_MESSAGE_TITLE = "§6Welcome and Incredible!";
+    public static final String WELCOME_MESSAGE_SUBTITLE = "§7Identify yourself or perish.";
+    public static final String WELCOME_MESSAGE_ACTION_BAR = "§eType §f/login <password> §eto join";
 
     public static final String SERVER_ONLINE_TITLE = "🟢 **Server Online**";
     public static final String SERVER_STARTED_DESC = "The server has started successfully and is ready for connections.";

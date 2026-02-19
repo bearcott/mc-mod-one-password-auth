@@ -5,7 +5,10 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
 
 import net.bearcott.passwordmod.util.Helpers;
+import net.bearcott.passwordmod.util.Messages;
 import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.Vec3;
 
@@ -39,14 +42,17 @@ public class AuthStorage {
         public int opLevel;
         public long joinTime; // the first join time until successful login
         public Vec3 joinPos;
+        public String ip; // for logging and potential future use
 
         // Transient fields (RAM only, reset on restart)
         public transient int loginAttempts;
         public transient long lastAttemptTime;
-        public transient Helpers.Location location;
+        public transient Helpers.Location ipLocation;
+        public transient int ticksUntilKick = -1; // used to delay kick by a few seconds for effect
 
         public PlayerSession(GameType mode, boolean wasOp, int opLevel, Vec3 joinPos) {
-            this.originalMode = mode;
+            // not entirely sure if this is necessary
+            this.originalMode = (mode != null) ? mode : GameType.SURVIVAL;
             this.wasOp = wasOp;
             this.opLevel = opLevel;
             this.joinTime = System.currentTimeMillis();
@@ -58,6 +64,25 @@ public class AuthStorage {
             this.joinTime = System.currentTimeMillis();
             this.loginAttempts = 0;
             this.lastAttemptTime = 0L;
+        }
+
+        public void setIpLocationAsync(String ip) {
+            // get their location to BM them if they get kicked from server
+            // consider using a separate worker since this is slow network task
+            SAVE_EXECUTOR.submit(() -> {
+                Helpers.Location loc = Helpers.fetchLocationData(ip);
+                this.ipLocation = loc;
+                this.ip = ip;
+            });
+        }
+
+        public void kickPlayerIfTickDelayed(ServerPlayer player) {
+            if (this.ticksUntilKick > 0) {
+                this.ticksUntilKick--;
+            } else if (this.ticksUntilKick == 0) {
+                this.ticksUntilKick = -1;
+                player.connection.disconnect(Component.literal(Messages.terminatedDisconnect(this.ipLocation.city())));
+            }
         }
     }
 
@@ -71,7 +96,7 @@ public class AuthStorage {
                     props.load(is);
                 }
             } else {
-                props.setProperty("password", "change_me");
+                props.setProperty("password", "");
                 props.setProperty("webhook_url", "");
                 props.setProperty("admin_webhook_url", "");
                 props.setProperty("timeout_seconds", "180");
@@ -109,7 +134,7 @@ public class AuthStorage {
             Vec3 joinPos) {
         return SESSIONS.computeIfAbsent(uuid, k -> {
             PlayerSession ps = new PlayerSession(mode, wasOp, opLevel, joinPos);
-            // saveSessionsToFileAsync();
+            saveSessionsToFileAsync();
             return ps;
         });
     }
@@ -129,7 +154,7 @@ public class AuthStorage {
 
     // --------- Whitelist ---------
 
-    public static void saveIP(String ip) {
+    public static void whitelistIP(String ip) {
         if (whitelistedIPs.add(ip)) {
             try {
                 Files.write(IP_PATH, whitelistedIPs, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);

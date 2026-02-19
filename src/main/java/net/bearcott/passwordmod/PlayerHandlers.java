@@ -4,11 +4,7 @@ import net.bearcott.passwordmod.util.Cosmetics;
 import net.bearcott.passwordmod.util.Helpers;
 import net.bearcott.passwordmod.util.Messages;
 import net.bearcott.passwordmod.util.Notifications;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
-import net.minecraft.network.protocol.game.ClientboundSetActionBarTextPacket;
-import net.minecraft.network.protocol.game.ClientboundSetSubtitleTextPacket;
-import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
@@ -37,19 +33,13 @@ public class PlayerHandlers {
 
         if (!isWhitelisted) {
             applyLockdown(player);
+
             Cosmetics.playSound(player, net.minecraft.sounds.SoundEvents.WITHER_SPAWN, 0.5f);
 
-            // get their location to BM them if they get kicked from server
-            // TODO: location is currently only used for message on login kick
-            if (workerPool != null)
-                workerPool.submit(() -> {
-                    Helpers.Location loc = Helpers.fetchLocationData(ip);
-                    // the session should exist after applyLockdown() since player is not
-                    // whitelisted
-                    // TODO: fix this bad design
-                    AuthStorage.PlayerSession s = AuthStorage.getPendingSession(uuid);
-                    s.location = loc;
-                });
+            // set their location to BM them if they get kicked from server
+            AuthStorage.PlayerSession session = AuthStorage.getPendingSession(uuid);
+            if (session != null)
+                session.setIpLocationAsync(ip);
         }
     }
 
@@ -68,29 +58,24 @@ public class PlayerHandlers {
         session.lastAttemptTime = System.currentTimeMillis();
 
         if (input.equals(AuthStorage.serverPassword)) {
-            AuthStorage.saveIP(ip);
-            liftLockdown(player);
+            AuthStorage.whitelistIP(ip);
+            liftLockdown(player, session);
 
-            // login effects
-            Cosmetics.playSound(player, net.minecraft.sounds.SoundEvents.PLAYER_LEVELUP, 1.0f);
-            Cosmetics.spawnEffect(player, ParticleTypes.TOTEM_OF_UNDYING, 20);
+            Cosmetics.loginSuccessEffects(player);
 
             // notifications
+            player.sendSystemMessage(Component.literal(Messages.AUTHENTICATED_MESSAGE));
             PasswordMod.LOGGER.info("✅ {} logged in.", player.getScoreboardName());
             Notifications.broadcast(Messages.authSuccess(player.getScoreboardName()), null, true, false,
                     workerPool);
-            player.sendSystemMessage(Component.literal("§a§lAuthenticated!§r May GulaGod bless you."));
         } else {
             session.loginAttempts = session.loginAttempts + 1;
 
             if (session.loginAttempts >= PasswordMod.MAX_ATTEMPTS) {
-                Cosmetics.spawnLightning(player);
-                Cosmetics.playSound(player, net.minecraft.sounds.SoundEvents.DRAGON_FIREBALL_EXPLODE, 1.0f);
-                Cosmetics.spawnEffect(player, ParticleTypes.EXPLOSION, 5);
+                Cosmetics.startKickPlayerEffects(player);
 
-                // TODO: better fetching and storing of player location name
-                Helpers.Location loc = session.location;
-                player.connection.disconnect(Component.literal(Messages.terminatedDisconnect(loc.city())));
+                // kick the player
+                session.ticksUntilKick = 5; // 5 x 50ms = 0.25s delay the kick to let the effects play out
             } else {
                 Cosmetics.playSound(player, net.minecraft.sounds.SoundEvents.CREEPER_PRIMED, 1.2f);
                 player.sendSystemMessage(Component.literal(Helpers.getSassyMessage(session.loginAttempts, input)));
@@ -139,13 +124,19 @@ public class PlayerHandlers {
         }
     }
 
+    public static void resetLockdownTimer(UUID uuid) {
+        AuthStorage.PlayerSession session = AuthStorage.getPendingSession(uuid);
+        if (session != null) {
+            session.lastAttemptTime = System.currentTimeMillis();
+            session.loginAttempts = 0;
+        }
+    }
+
     public static void applyLockdown(ServerPlayer player) {
         UUID uuid = player.getUUID();
         if (AuthStorage.hasPendingSession(uuid)) {
             // if the session already exists, only reset their timeout
-            AuthStorage.PlayerSession session = AuthStorage.getPendingSession(uuid);
-            session.lastAttemptTime = System.currentTimeMillis();
-            session.loginAttempts = 0;
+            resetLockdownTimer(uuid);
             return;
         }
 
@@ -157,19 +148,14 @@ public class PlayerHandlers {
         player.setInvulnerable(true);
         player.addEffect(new MobEffectInstance(MobEffects.BLINDNESS, 100000, 10, false, false));
 
+        // send login instructions via chat
         player.sendSystemMessage(Component.literal(Messages.LOGIN_PROMPT_DIV));
         player.sendSystemMessage(Component.literal(Messages.LOGIN_PROMPT_LINE));
         player.sendSystemMessage(Component.literal(Messages.LOGIN_PROMPT_DIV));
     }
 
-    public static void liftLockdown(ServerPlayer player) {
+    public static void liftLockdown(ServerPlayer player, AuthStorage.PlayerSession session) {
         UUID uuid = player.getUUID();
-
-        // TODO: more elegant way of checking if exists
-        if (!AuthStorage.hasPendingSession(uuid))
-            return;
-
-        AuthStorage.PlayerSession session = AuthStorage.getPendingSession(uuid);
 
         player.setGameMode(session.originalMode);
 
@@ -181,13 +167,13 @@ public class PlayerHandlers {
             LevelBasedPermissionSet pSet = LevelBasedPermissionSet.forLevel(pLevel);
             ServerOpListEntry entry = new ServerOpListEntry(nameAndId, pSet, false);
 
+            // force op update immediately so they don't have to rejoin
             sl.getServer().getPlayerList().getOps().add(entry);
             sl.getServer().getPlayerList().sendPlayerPermissionLevel(player);
             sl.getServer().getCommands().sendCommands(player);
             player.onUpdateAbilities();
 
-            player.sendSystemMessage(Component.literal("§b[Security]§r Welcome back comrade " + nameAndId.name()
-                    + "! Lvl " + session.opLevel + " OP restored."));
+            player.sendSystemMessage(Component.literal(Messages.welcomeBack(nameAndId.name(), session.opLevel)));
         }
 
         // remove any lockdown effects regardless of session, if this is called w/o a
@@ -196,13 +182,10 @@ public class PlayerHandlers {
         player.setInvulnerable(false);
         player.removeEffect(MobEffects.BLINDNESS);
 
-        player.connection.send(new ClientboundSetTitleTextPacket(net.minecraft.network.chat.Component.literal("")));
-        player.connection.send(new ClientboundSetSubtitleTextPacket(net.minecraft.network.chat.Component.literal("")));
-        player.connection.send(new ClientboundSetActionBarTextPacket(net.minecraft.network.chat.Component.literal("")));
+        Cosmetics.resetTitle(player);
     }
 
-    public static void restrictMovement(ServerPlayer player) {
-        AuthStorage.PlayerSession s = AuthStorage.getPendingSession(player.getUUID());
+    public static void restrictMovement(ServerPlayer player, AuthStorage.PlayerSession s) {
         if (s != null && s.joinPos != null && player.position().distanceToSqr(s.joinPos) > 0.01
                 && player.level() instanceof ServerLevel sl) {
             player.teleport(new TeleportTransition(sl, s.joinPos, Vec3.ZERO, player.getYRot(), player.getXRot(),
