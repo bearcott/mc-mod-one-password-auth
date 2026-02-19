@@ -5,6 +5,7 @@ import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.*;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundSource;
@@ -16,6 +17,12 @@ public class Cosmetics {
         Cosmetics.spawnLightning(player);
         Cosmetics.playSound(player, net.minecraft.sounds.SoundEvents.DRAGON_FIREBALL_EXPLODE, 1.0f);
         Cosmetics.spawnEffect(player, ParticleTypes.EXPLOSION, 5);
+    }
+
+    public static void chatLoginInstructions(ServerPlayer player) {
+        player.sendSystemMessage(Component.literal(Messages.LOGIN_PROMPT_DIV));
+        player.sendSystemMessage(Component.literal(Messages.LOGIN_PROMPT_LINE));
+        player.sendSystemMessage(Component.literal(Messages.LOGIN_PROMPT_DIV));
     }
 
     public static void loginSuccessEffects(ServerPlayer player) {

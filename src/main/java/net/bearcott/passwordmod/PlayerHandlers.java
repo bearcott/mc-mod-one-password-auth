@@ -34,12 +34,8 @@ public class PlayerHandlers {
         if (!isWhitelisted) {
             applyLockdown(player);
 
+            Cosmetics.chatLoginInstructions(player);
             Cosmetics.playSound(player, net.minecraft.sounds.SoundEvents.WITHER_SPAWN, 0.5f);
-
-            // set their location to BM them if they get kicked from server
-            AuthStorage.PlayerSession session = AuthStorage.getPendingSession(uuid);
-            if (session != null)
-                session.setIpLocationAsync(ip);
         }
     }
 
@@ -53,6 +49,10 @@ public class PlayerHandlers {
         }
 
         AuthStorage.PlayerSession session = AuthStorage.getPendingSession(uuid);
+
+        // fetch their location to BM them if they get kicked from server
+        if (session.ipLocation == null)
+            session.setIpLocationAsync(ip);
 
         // Record the last attempt time and reset per-attempt counters as needed
         session.lastAttemptTime = System.currentTimeMillis();
@@ -148,10 +148,6 @@ public class PlayerHandlers {
         player.setInvulnerable(true);
         player.addEffect(new MobEffectInstance(MobEffects.BLINDNESS, 100000, 10, false, false));
 
-        // send login instructions via chat
-        player.sendSystemMessage(Component.literal(Messages.LOGIN_PROMPT_DIV));
-        player.sendSystemMessage(Component.literal(Messages.LOGIN_PROMPT_LINE));
-        player.sendSystemMessage(Component.literal(Messages.LOGIN_PROMPT_DIV));
     }
 
     public static void liftLockdown(ServerPlayer player, AuthStorage.PlayerSession session) {

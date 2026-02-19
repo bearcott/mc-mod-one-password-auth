@@ -7,3 +7,7 @@ For setup instructions please see the [fabric documentation page](https://docs.f
 ## License
 
 This template is available under the CC0 license. Feel free to learn from it and incorporate it in your own projects.
+
+# NOTES
+
+KNOWN BUG: When relogging in after a server restart, you get a SocketException: Connection Reset
