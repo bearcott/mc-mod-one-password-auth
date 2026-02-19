@@ -24,7 +24,6 @@ import java.util.concurrent.ExecutorService;
 public class PlayerHandlers {
     public static void handlePlayerJoin(ServerPlayer player, ExecutorService workerPool) {
         String ip = player.getIpAddress();
-        UUID uuid = player.getUUID();
         boolean isWhitelisted = AuthStorage.isWhitelisted(ip);
 
         String msg = "⚠️ **" + player.getScoreboardName() + "** joined "
@@ -124,19 +123,12 @@ public class PlayerHandlers {
         }
     }
 
-    public static void resetLockdownTimer(UUID uuid) {
-        AuthStorage.PlayerSession session = AuthStorage.getPendingSession(uuid);
-        if (session != null) {
-            session.lastAttemptTime = System.currentTimeMillis();
-            session.loginAttempts = 0;
-        }
-    }
-
     public static void applyLockdown(ServerPlayer player) {
         UUID uuid = player.getUUID();
-        if (AuthStorage.hasPendingSession(uuid)) {
+        AuthStorage.PlayerSession session = AuthStorage.getPendingSession(uuid);
+        if (session != null) {
             // if the session already exists, only reset their timeout
-            resetLockdownTimer(uuid);
+            session.resetLockdownTimer();
             return;
         }
 

@@ -58,6 +58,15 @@ public class AuthStorage {
             this.joinTime = System.currentTimeMillis();
             this.lastAttemptTime = System.currentTimeMillis();
             this.joinPos = joinPos;
+            this.ipLocation = Helpers.Location.unknown();
+        }
+
+        // TODO: fix this initialization issue with file save
+        public void resetLockdownTimer() {
+            this.lastAttemptTime = System.currentTimeMillis();
+            this.loginAttempts = 0;
+            this.ipLocation = Helpers.Location.unknown();
+            this.ticksUntilKick = -1;
         }
 
         public void refresh() {
