@@ -81,7 +81,7 @@ public class Helpers {
                     yield prefix + "...Do you not know how to do addition or something?";
                 }
             }
-            case 6 -> prefix + "You're a failure. That's so sad.";
+            case 6 -> prefix + "You're a failure.";
             default -> prefix;
         };
     }
