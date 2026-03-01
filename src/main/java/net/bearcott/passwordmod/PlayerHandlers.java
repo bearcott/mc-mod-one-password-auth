@@ -50,7 +50,7 @@ public class PlayerHandlers {
         AuthStorage.PlayerSession session = AuthStorage.getPendingSession(uuid);
 
         // fetch their location to BM them if they get kicked from server
-        if (session.ipLocation == null)
+        if (!session.didFetchLocation)
             session.setIpLocationAsync(ip);
 
         // Record the last attempt time and reset per-attempt counters as needed
@@ -134,7 +134,7 @@ public class PlayerHandlers {
 
         createPendingPlayerSession(player);
 
-        // lockdown regardless whether or not we can save their previous state to
+        // lockdown regardless of whether we can save their previous state to
         // prevent bypassing login.
         player.setGameMode(GameType.SPECTATOR);
         player.setInvulnerable(true);
@@ -165,7 +165,7 @@ public class PlayerHandlers {
         }
 
         // remove any lockdown effects regardless of session, if this is called w/o a
-        // session, things like gamemode and op won't be restored
+        // session, things like game mode and op won't be restored
         AuthStorage.removePendingSession(uuid);
         player.setInvulnerable(false);
         player.removeEffect(MobEffects.BLINDNESS);

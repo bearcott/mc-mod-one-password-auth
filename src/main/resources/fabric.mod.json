@@ -8,6 +8,9 @@
   "entrypoints": {
     "main": ["net.bearcott.passwordmod.PasswordMod"]
   },
+  "mixins": [
+    "passwordmod.mixins.json"
+  ],
   "depends": {
     "fabricloader": ">=0.18.2",
     "minecraft": "~1.21.11",

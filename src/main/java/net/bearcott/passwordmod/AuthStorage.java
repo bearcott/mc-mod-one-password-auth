@@ -48,6 +48,7 @@ public class AuthStorage {
         public transient int loginAttempts;
         public transient long lastAttemptTime;
         public transient Helpers.Location ipLocation;
+        public transient boolean didFetchLocation;
         public transient int ticksUntilKick = -1; // used to delay kick by a few seconds for effect
 
         public PlayerSession(GameType mode, boolean wasOp, int opLevel, Vec3 joinPos) {
@@ -59,6 +60,7 @@ public class AuthStorage {
             this.lastAttemptTime = System.currentTimeMillis();
             this.joinPos = joinPos;
             this.ipLocation = Helpers.Location.unknown();
+            this.didFetchLocation = false;
         }
 
         // TODO: fix this initialization issue with file save
@@ -67,6 +69,7 @@ public class AuthStorage {
             this.loginAttempts = 0;
             this.ipLocation = Helpers.Location.unknown();
             this.ticksUntilKick = -1;
+            this.didFetchLocation = false;
         }
 
         public void refresh() {
@@ -79,8 +82,7 @@ public class AuthStorage {
             // get their location to BM them if they get kicked from server
             // consider using a separate worker since this is slow network task
             SAVE_EXECUTOR.submit(() -> {
-                Helpers.Location loc = Helpers.fetchLocationData(ip);
-                this.ipLocation = loc;
+                this.ipLocation = Helpers.fetchLocationData(ip);
                 this.ip = ip;
             });
         }
@@ -119,14 +121,14 @@ public class AuthStorage {
             adminWebhookUrl = props.getProperty("admin_webhook_url");
             timeoutSec = Helpers.numberOrDefault(props.getProperty("timeout_seconds"), 180);
         } catch (IOException e) {
-            e.printStackTrace();
+            PasswordMod.LOGGER.error("Something went wrong!", e);
         }
 
         if (Files.exists(IP_PATH)) {
             try {
                 whitelistedIPs.addAll(Files.readAllLines(IP_PATH));
             } catch (IOException e) {
-                e.printStackTrace();
+                PasswordMod.LOGGER.error("Something went wrong!", e);
             }
         }
         loadSessionsFromFile();
@@ -168,7 +170,7 @@ public class AuthStorage {
             try {
                 Files.write(IP_PATH, whitelistedIPs, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
             } catch (IOException e) {
-                e.printStackTrace();
+                PasswordMod.LOGGER.error("Something went wrong!", e);
             }
         }
     }
@@ -188,7 +190,7 @@ public class AuthStorage {
             if (loaded != null)
                 SESSIONS.putAll(loaded);
         } catch (Exception e) {
-            e.printStackTrace();
+            PasswordMod.LOGGER.error("Something went wrong!", e);
         }
     }
 
@@ -196,7 +198,7 @@ public class AuthStorage {
         try (Writer w = new FileWriter(SESSIONS_FILE)) {
             GSON.toJson(SESSIONS, w);
         } catch (IOException e) {
-            e.printStackTrace();
+            PasswordMod.LOGGER.error("Something went wrong!", e);
         }
     }
 

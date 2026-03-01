@@ -87,7 +87,7 @@ public class PasswordMod implements ModInitializer {
                 // Logic for players in lockdown
                 if (session != null) {
                     // kick if they exceed the timeout limit since joining or last attempt
-                    if (System.currentTimeMillis() - session.lastAttemptTime > AuthStorage.timeoutSec * 1000) {
+                    if (System.currentTimeMillis() - session.lastAttemptTime > (long) AuthStorage.timeoutSec * 1000) {
                         player.connection.disconnect(Component.literal(Messages.TIMEOUT_DISCONNECT));
 
                         Notifications.broadcast(Messages.timeoutBroadcast(player.getScoreboardName()), null, true,
@@ -107,7 +107,7 @@ public class PasswordMod implements ModInitializer {
                 }
 
                 // If they have no session at all and aren't whitelisted, apply lockdown
-                else if (session == null && player.isAlive()) {
+                if (session == null && player.isAlive()) {
                     PlayerHandlers.applyLockdown(player);
                 }
             }
