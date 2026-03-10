@@ -48,16 +48,14 @@ jobs:
           files: ${{ steps.jar.outputs.PATH }}
           generate_release_notes: true
 
-      - name: Publish to Modrinth
-        uses: modrinth/minotaur-action@v2
+      - name: Publish to GitHub & Modrinth
+        uses: Kir-Antipov/mc-publish@v3.3
         with:
-          token: ${{ secrets.MODRINTH_TOKEN }}
-          project-id: ${{ vars.MODRINTH_PROJECT_ID }}
-          upload-file: ${{ steps.jar.outputs.PATH }}
-          version-number: ${{ steps.version.outputs.VERSION }}
+          modrinth-id: ${{ vars.MODRINTH_PROJECT_ID }}
+          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
+          files: ${{ steps.jar.outputs.PATH }}
+          version: ${{ steps.version.outputs.VERSION }}
           version-type: release
-          game-versions: |
-            1.21.1
-          loaders: |
-            fabric
-          changelog: ${{ github.event.release.body }}
+          game-versions: 1.21.1
+          loaders: fabric
+          java: 21
