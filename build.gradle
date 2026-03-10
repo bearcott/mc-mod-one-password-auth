@@ -87,17 +87,3 @@ publishing {
 		// retrieving dependencies.
 	}
 }
-
-plugins {
-    id "com.modrinth.minotaur" version "2.+"
-}
-
-modrinth {
-    token = System.getenv("MODRINTH_TOKEN")
-    projectId = System.getenv("MODRINTH_PROJECT_ID")
-    versionNumber = project.version
-    uploadFile = remapJar
-    gameVersions = ["1.21.1"]
-    loaders = ["fabric"]
-    changelog = System.getenv("CHANGELOG") ?: ""
-}
