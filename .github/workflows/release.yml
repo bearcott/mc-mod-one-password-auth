@@ -1,0 +1,48 @@
+# Automatically builds and publishes a release when a new tag is pushed.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: 21
+          distribution: temurin
+
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
+
+      - name: Build mod
+        run: ./gradlew build
+
+      - name: Get version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Find JAR
+        id: jar
+        run: |
+          JAR=$(ls build/libs/*.jar | grep -v '\-dev\|-sources\|-shadow' | head -n 1)
+          echo "PATH=$JAR" >> $GITHUB_OUTPUT
+          echo "NAME=$(basename $JAR)" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "v${{ steps.version.outputs.VERSION }}"
+          files: ${{ steps.jar.outputs.PATH }}
+          generate_release_notes: true
