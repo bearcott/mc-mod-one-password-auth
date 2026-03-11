@@ -37,3 +37,4 @@ Since this is IP whitelisted, the major risk is IP exposure/spoofing!
 **TODO:**
 
 - Feature improvement: make IP whitelist restricted to the user account for that IP. Require reauthenticating per user account (in the case that an IP somehow gets exposed)
+- Fix occasional bug where player is still stuck in spectator due to rushing the system
