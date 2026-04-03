@@ -76,7 +76,7 @@ public class PasswordMod implements ModInitializer {
 
                 AuthStorage.PlayerSession session = AuthStorage.getPendingSession(player.getUUID());
 
-                // If are whitelisted, ignore the rest
+                // If are whitelisted, lift their lockdown and skip the rest
                 if (AuthStorage.isWhitelisted(player.getIpAddress())) {
                     // If they somehow still have the lockdown, lift it
                     if (session != null)

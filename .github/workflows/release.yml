@@ -49,6 +49,12 @@ jobs:
           files: ${{ steps.jar.outputs.PATH }}
           generate_release_notes: true
 
+      - name: Extract Game Version from Properties
+        id: game_version
+        run: |
+          VERSION=$(grep 'minecraft_version' gradle.properties | cut -d'=' -f2 | tr -d '[:space:]')
+          echo "GAME_VERSION=$VERSION" >> $GITHUB_OUTPUT
+
       - name: Publish to GitHub & Modrinth
         uses: Kir-Antipov/mc-publish@v3.3
         with:
@@ -57,6 +63,6 @@ jobs:
           files: ${{ steps.jar.outputs.PATH }}
           version: ${{ steps.version.outputs.VERSION }}
           version-type: release
-          game-versions: 1.21.1
+          game-versions: ${{ steps.game_version.outputs.GAME_VERSION }}
           loaders: fabric
           java: 21
