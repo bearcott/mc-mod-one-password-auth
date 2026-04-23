@@ -7,6 +7,7 @@ public class Messages {
     public static final String RATE_LIMITED = "§cTry again in a moment...";
     public static final String FATAL_ERROR = "§cUh Oh! Something went wrong, please contact an admin...";
     public static final String AUTHENTICATED_MESSAGE = "§a§lAuthenticated!§r May GulaGod bless you.";
+    public static final String LOCKDOWN_DENIED = "§cNope! :3";
 
     public static String authSuccess(String name) {
         return "✅ **" + name + "** authenticated successfully.";

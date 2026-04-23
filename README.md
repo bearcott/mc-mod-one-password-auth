@@ -34,6 +34,8 @@ Restart the server and thats it! The next time anyone logs in, they will be gree
 
 Since this is IP whitelisted, the major risk is IP exposure/spoofing!
 
+> ⚠️ Designed for vanilla survival only — third-party mods/datapacks that register commands or bypass spectator mode may not be secure. Use with caution.
+
 **TODO:**
 
 - Feature improvement: make IP whitelist restricted to the user account for that IP. Require reauthenticating per user account (in the case that an IP somehow gets exposed)

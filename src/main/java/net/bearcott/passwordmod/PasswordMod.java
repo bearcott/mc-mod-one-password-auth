@@ -36,6 +36,7 @@ public class PasswordMod implements ModInitializer {
         AuthStorage.load();
 
         ServerStatusLogger.register();
+        LockdownGuards.register();
 
         // Ensure sessions are saved when the server shuts down
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> AuthStorage.saveSessionsToFile());

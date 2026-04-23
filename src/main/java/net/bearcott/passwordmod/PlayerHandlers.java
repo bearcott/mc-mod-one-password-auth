@@ -124,22 +124,18 @@ public class PlayerHandlers {
     }
 
     public static void applyLockdown(ServerPlayer player) {
-        UUID uuid = player.getUUID();
-        AuthStorage.PlayerSession session = AuthStorage.getPendingSession(uuid);
+        AuthStorage.PlayerSession session = AuthStorage.getPendingSession(player.getUUID());
         if (session != null) {
-            // if the session already exists, only reset their timeout
             session.resetLockdownTimer();
-            return;
+        } else {
+            createPendingPlayerSession(player);
         }
 
-        createPendingPlayerSession(player);
-
-        // lockdown regardless of whether we can save their previous state to
-        // prevent bypassing login.
+        // Idempotent: always re-assert so crash/desync or external state drift
+        // (e.g. /gamemode, /effect clear) can't leave a session holder unlocked.
         player.setGameMode(GameType.SPECTATOR);
         player.setInvulnerable(true);
         player.addEffect(new MobEffectInstance(MobEffects.BLINDNESS, 100000, 10, false, false));
-
     }
 
     public static void liftLockdown(ServerPlayer player, AuthStorage.PlayerSession session) {
