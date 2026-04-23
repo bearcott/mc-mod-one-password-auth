@@ -70,6 +70,7 @@ jobs:
           java: 21
 
       - name: Sync Modrinth project description from README
+        if: always()
         env:
           MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
           MODRINTH_PROJECT_ID: ${{ vars.MODRINTH_PROJECT_ID }}
