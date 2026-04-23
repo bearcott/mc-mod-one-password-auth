@@ -20,10 +20,12 @@ import java.util.*;
 import java.util.concurrent.*;
 
 public class AuthStorage {
-    private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("auth_config.properties");
-    private static final Path IP_PATH = FabricLoader.getInstance().getConfigDir().resolve("ip_whitelist.txt");
-    private static final File SESSIONS_FILE = FabricLoader.getInstance().getConfigDir().resolve("auth_sessions.json")
-            .toFile();
+    private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir()
+            .resolve("one_password_auth_config.properties");
+    private static final Path IP_PATH = FabricLoader.getInstance().getConfigDir()
+            .resolve("one_password_auth_ip_whitelist.txt");
+    private static final File SESSIONS_FILE = FabricLoader.getInstance().getConfigDir()
+            .resolve("one_password_auth_sessions.json").toFile();
 
     private static final int SHUTDOWN_TIMEOUT_SECONDS = 5;
 

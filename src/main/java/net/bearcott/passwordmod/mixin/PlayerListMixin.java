@@ -1,9 +1,9 @@
 package net.bearcott.passwordmod.mixin;
 
-import com.mojang.authlib.GameProfile;
 import net.bearcott.passwordmod.AuthStorage;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.players.NameAndId;
 import net.minecraft.server.players.PlayerList;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -18,10 +18,12 @@ public abstract class PlayerListMixin {
     // Reject a new connection when an authenticated session for the same UUID is
     // already online. If the existing connection is still in lockdown, fall through
     // to vanilla (which kicks it) so a legitimate owner can recover a stuck login.
+    //
+    // Signature note: 1.21.11 replaced GameProfile with NameAndId (class_11560) here.
     @Inject(method = "canPlayerLogin", at = @At("HEAD"), cancellable = true, remap = true)
     private void onePasswordAuth$denyDuplicateAuthedLogin(
             SocketAddress address,
-            GameProfile profile,
+            NameAndId profile,
             CallbackInfoReturnable<Component> cir) {
         PlayerList self = (PlayerList) (Object) this;
         ServerPlayer existing = self.getPlayer(profile.id());
