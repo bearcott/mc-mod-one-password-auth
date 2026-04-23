@@ -68,3 +68,14 @@ jobs:
           game-versions: ${{ steps.game_version.outputs.GAME_VERSION }}
           loaders: fabric
           java: 21
+
+      - name: Sync Modrinth project description from README
+        env:
+          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+          MODRINTH_PROJECT_ID: ${{ vars.MODRINTH_PROJECT_ID }}
+        run: |
+          jq -n --rawfile body README.md '{body: $body}' | \
+            curl -fsS -X PATCH "https://api.modrinth.com/v2/project/$MODRINTH_PROJECT_ID" \
+              -H "Authorization: $MODRINTH_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d @-
