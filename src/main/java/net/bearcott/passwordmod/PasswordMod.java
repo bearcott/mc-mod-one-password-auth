@@ -105,6 +105,9 @@ public class PasswordMod implements ModInitializer {
 
                     // hold all pending players in place
                     PlayerLockdownHandlers.restrictMovement(player, session);
+
+                    // re-assert lockdown if external state changed it (drift check)
+                    PlayerLockdownHandlers.reassertIfDrifted(player);
                 }
 
                 // If they have no session at all and aren't whitelisted, apply lockdown

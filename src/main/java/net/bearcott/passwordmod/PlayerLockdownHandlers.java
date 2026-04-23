@@ -171,6 +171,14 @@ public class PlayerLockdownHandlers {
         Cosmetics.resetTitle(player);
     }
 
+    public static void reassertIfDrifted(ServerPlayer player) {
+        if (player.gameMode.getGameModeForPlayer() != GameType.SPECTATOR
+                || !player.isInvulnerable()
+                || !player.hasEffect(MobEffects.BLINDNESS)) {
+            applyLockdown(player);
+        }
+    }
+
     public static void restrictMovement(ServerPlayer player, AuthStorage.PlayerSession s) {
         if (s != null && s.joinPos != null && player.position().distanceToSqr(s.joinPos) > 0.01
                 && player.level() instanceof ServerLevel sl) {

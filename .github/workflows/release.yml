@@ -1,6 +1,6 @@
 # Automatically builds and publishes a release when a new tag is pushed.
 # NOTE: Set up MODRINTH_TOKEN and MODRINTH_PROJECT_ID in the repository secrets and variables respectively before using this workflow.
-# then `git tag v1.0.* && git push origin v1.0.*`
+# commit changes then push via `git tag v1.0.* && git push origin main --follow-tags`
 
 name: Release
 
@@ -28,12 +28,14 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      - name: Build mod
-        run: ./gradlew build
-
       - name: Get version from tag
         id: version
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Build mod
+        env:
+          MOD_VERSION: ${{ steps.version.outputs.VERSION }}
+        run: ./gradlew build
 
       - name: Find JAR
         id: jar
