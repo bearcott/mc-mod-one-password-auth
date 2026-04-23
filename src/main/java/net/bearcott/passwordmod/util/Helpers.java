@@ -5,6 +5,7 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
+import java.security.SecureRandom;
 import java.util.UUID;
 
 import net.bearcott.passwordmod.AuthStorage;
@@ -15,6 +16,13 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 public class Helpers {
     private static final int LOCATION_LOOKUP_TIMEOUT_MS = 5000;
     private static final long RATE_LIMIT_WINDOW_MS = 1000L;
+
+    // Pronounceable-password alphabet. Consonants + vowels build CV syllables that are
+    // easy to read aloud; a digit tail and a symbol push entropy past ~7e8 combinations.
+    private static final char[] PW_CONSONANTS = "bcdfghjklmnprstvwz".toCharArray();
+    private static final char[] PW_VOWELS = "aeiou".toCharArray();
+    private static final char[] PW_SYMBOLS = "!@#$".toCharArray();
+    private static final SecureRandom PW_RANDOM = new SecureRandom();
 
     public static record Location(String city, String country) {
         public String full() {
@@ -68,24 +76,32 @@ public class Helpers {
         return switch (attempt) {
             case 1 -> prefix + "Uh oh! Did you forget your own password? Try again.";
             case 2 -> prefix + "Is this a new server? Try \"§d§lPassWord123§f\"";
-            case 3 -> {
-                if (input.equals("PassWord123")) {
-                    yield prefix + "Aw come on, you really thought that would work??";
-                } else {
-                    yield prefix + "Maybe try looking at the keyboard next time?";
-                }
-            }
+            case 3 -> prefix + (input.equals("PassWord123")
+                    ? "Aw come on, you really thought that would work??"
+                    : "Maybe try looking at the keyboard next time?");
             case 4 -> "§a§lSuccess!§r Please solve the captcha: §d§lWhat is 48+19?§f";
-            case 5 -> {
-                if (check67Answer(input)) {
-                    yield prefix + "You thought that was gonna get you in?? Math??";
-                } else {
-                    yield prefix + "...Do you not know how to do addition or something?";
-                }
-            }
+            case 5 -> prefix + (check67Answer(input)
+                    ? "You thought that was gonna get you in?? Math??"
+                    : "...Do you not know how to do addition or something?");
             case 6 -> prefix + "You're a failure.";
             default -> prefix;
         };
+    }
+
+    // Three CV syllables + 1–3 digits + 1 symbol, e.g. "komipu42!".
+    // Safe to paste into a Properties value: none of !@#$ is a comment or delimiter
+    // character mid-value. Excludes \ and % so no escape/format-specifier surprises.
+    public static String generateDefaultPassword() {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < 3; i++) {
+            sb.append(PW_CONSONANTS[PW_RANDOM.nextInt(PW_CONSONANTS.length)]);
+            sb.append(PW_VOWELS[PW_RANDOM.nextInt(PW_VOWELS.length)]);
+        }
+        int digits = 1 + PW_RANDOM.nextInt(3);
+        for (int i = 0; i < digits; i++)
+            sb.append(PW_RANDOM.nextInt(10));
+        sb.append(PW_SYMBOLS[PW_RANDOM.nextInt(PW_SYMBOLS.length)]);
+        return sb.toString();
     }
 
     public static int numberOrDefault(String val, int defaultVal) {

@@ -1,6 +1,7 @@
 package net.bearcott.passwordmod.mixin;
 
 import net.bearcott.passwordmod.AuthStorage;
+import net.bearcott.passwordmod.util.Messages;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.NameAndId;
@@ -34,7 +35,6 @@ public abstract class PlayerListMixin {
             return;
         if (AuthStorage.hasPendingSession(profile.id()))
             return;
-        cir.setReturnValue(Component.literal(
-                "§cSomeone is already logged into this account. Try again later."));
+        cir.setReturnValue(Component.literal(Messages.DUPLICATE_LOGIN_DENIED));
     }
 }

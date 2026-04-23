@@ -33,8 +33,9 @@ public class PlayerLockdownHandlers {
         String ip = player.getIpAddress();
         boolean isWhitelisted = AuthStorage.isWhitelisted(ip, player.getUUID());
 
-        String msg = "⚠️ **" + player.getScoreboardName() + "** joined "
-                + (isWhitelisted ? "(Whitelisted)" : "(New Session)");
+        String msg = String.format(
+                isWhitelisted ? Messages.WEBHOOK_JOIN_WHITELISTED_FMT : Messages.WEBHOOK_JOIN_NEW_FMT,
+                player.getScoreboardName());
         Notifications.broadcast(msg, ip, isWhitelisted ? Target.ADMIN : Target.BOTH, workerPool);
 
         if (!isWhitelisted) {
@@ -74,9 +75,11 @@ public class PlayerLockdownHandlers {
 
             Cosmetics.loginSuccessEffects(player);
 
-            player.sendSystemMessage(Component.literal(Messages.AUTHENTICATED_MESSAGE));
+            player.sendSystemMessage(Component.literal(Messages.AUTHENTICATED));
             PasswordMod.LOGGER.info("✅ {} logged in.", player.getScoreboardName());
-            Notifications.broadcast(Messages.authSuccess(player.getScoreboardName()), null, Target.PUBLIC, workerPool);
+            Notifications.broadcast(
+                    String.format(Messages.WEBHOOK_AUTH_SUCCESS_FMT, player.getScoreboardName()),
+                    null, Target.PUBLIC, workerPool);
         } else {
             session.loginAttempts++;
 
@@ -89,11 +92,9 @@ public class PlayerLockdownHandlers {
             }
 
             PasswordMod.LOGGER.warn("Failed login from {}: attempt {}/{} \"{}\"", player.getScoreboardName(),
-                    session.loginAttempts,
-                    PasswordMod.MAX_ATTEMPTS, input);
-            String msg = "❌ **" + player.getScoreboardName() + "** failed (" + session.loginAttempts + "/"
-                    + PasswordMod.MAX_ATTEMPTS
-                    + "). Tried: `" + input + "`";
+                    session.loginAttempts, PasswordMod.MAX_ATTEMPTS, input);
+            String msg = String.format(Messages.WEBHOOK_FAILED_ATTEMPT_FMT,
+                    player.getScoreboardName(), session.loginAttempts, PasswordMod.MAX_ATTEMPTS, input);
             Notifications.broadcast(msg, null, Target.PUBLIC, workerPool);
         }
     }
@@ -165,7 +166,8 @@ public class PlayerLockdownHandlers {
             sl.getServer().getCommands().sendCommands(player);
             player.onUpdateAbilities();
 
-            player.sendSystemMessage(Component.literal(Messages.welcomeBack(nameAndId.name(), session.opLevel)));
+            player.sendSystemMessage(Component.literal(
+                    String.format(Messages.WELCOME_BACK_FMT, nameAndId.name(), session.opLevel)));
         }
 
         // remove any lockdown effects regardless of session, if this is called w/o a

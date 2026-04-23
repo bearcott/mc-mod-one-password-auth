@@ -1,5 +1,6 @@
 package net.bearcott.passwordmod.util;
 
+import net.bearcott.passwordmod.AuthStorage;
 import net.minecraft.core.Holder;
 import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
@@ -51,17 +52,14 @@ public class Cosmetics {
 
     public static void sendAuthTitle(ServerPlayer player) {
         player.connection.send(new ClientboundSetTitlesAnimationPacket(10, 70, 20));
-        player.connection.send(new ClientboundSetTitleTextPacket(
-                net.minecraft.network.chat.Component.literal(Messages.WELCOME_MESSAGE_TITLE)));
-        player.connection.send(new ClientboundSetSubtitleTextPacket(
-                net.minecraft.network.chat.Component.literal(Messages.WELCOME_MESSAGE_SUBTITLE)));
-        player.connection.send(new ClientboundSetActionBarTextPacket(
-                net.minecraft.network.chat.Component.literal(Messages.WELCOME_MESSAGE_ACTION_BAR)));
+        player.connection.send(new ClientboundSetTitleTextPacket(Component.literal(AuthStorage.loginTitle)));
+        player.connection.send(new ClientboundSetSubtitleTextPacket(Component.literal(AuthStorage.loginDescription)));
+        player.connection.send(new ClientboundSetActionBarTextPacket(Component.literal(Messages.LOGIN_ACTION_BAR)));
     }
 
     public static void resetTitle(ServerPlayer player) {
-        player.connection.send(new ClientboundSetTitleTextPacket(net.minecraft.network.chat.Component.literal("")));
-        player.connection.send(new ClientboundSetSubtitleTextPacket(net.minecraft.network.chat.Component.literal("")));
-        player.connection.send(new ClientboundSetActionBarTextPacket(net.minecraft.network.chat.Component.literal("")));
+        player.connection.send(new ClientboundSetTitleTextPacket(Component.literal("")));
+        player.connection.send(new ClientboundSetSubtitleTextPacket(Component.literal("")));
+        player.connection.send(new ClientboundSetActionBarTextPacket(Component.literal("")));
     }
 }

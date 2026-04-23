@@ -113,10 +113,11 @@ public class PasswordMod implements ModInitializer {
                 if (session != null) {
                     // kick if they exceed the timeout limit since joining or last attempt
                     if (System.currentTimeMillis() - session.lastAttemptTime > (long) AuthStorage.timeoutSec * 1000) {
-                        player.connection.disconnect(Component.literal(Messages.TIMEOUT_DISCONNECT));
+                        player.connection.disconnect(Component.literal(Messages.KICK_TIMEOUT));
 
-                        Notifications.broadcast(Messages.timeoutBroadcast(player.getScoreboardName()), null,
-                                Target.PUBLIC, WORKER_POOL);
+                        Notifications.broadcast(
+                                String.format(Messages.WEBHOOK_TIMEOUT_FMT, player.getScoreboardName()),
+                                null, Target.PUBLIC, WORKER_POOL);
                         continue;
                     }
 
@@ -153,8 +154,9 @@ public class PasswordMod implements ModInitializer {
             UUID uuid = player.getUUID();
 
             boolean wasPending = AuthStorage.hasPendingSession(uuid);
-            String msg = wasPending ? Messages.disconnectFailed(player.getScoreboardName())
-                    : Messages.disconnectLeft(player.getScoreboardName());
+            String msg = String.format(
+                    wasPending ? Messages.WEBHOOK_DISCONNECT_PENDING_FMT : Messages.WEBHOOK_DISCONNECT_LEFT_FMT,
+                    player.getScoreboardName());
             Notifications.broadcast(msg, null, wasPending ? Target.BOTH : Target.ADMIN, WORKER_POOL);
         });
     }

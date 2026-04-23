@@ -13,6 +13,7 @@ import net.minecraft.world.level.GameType;
 import net.minecraft.world.phys.Vec3;
 
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -46,6 +47,8 @@ public class AuthStorage {
     public static String serverPassword;
     public static String webhookUrl;
     public static String adminWebhookUrl;
+    public static String loginTitle;
+    public static String loginDescription;
     public static int timeoutSec;
 
     public static class PlayerSession {
@@ -101,7 +104,8 @@ public class AuthStorage {
                 this.ticksUntilKick--;
             } else if (this.ticksUntilKick == 0) {
                 this.ticksUntilKick = -1;
-                player.connection.disconnect(Component.literal(Messages.terminatedDisconnect(this.ipLocation.city())));
+                player.connection.disconnect(Component.literal(
+                        String.format(Messages.KICK_TERMINATED_FMT, this.ipLocation.city())));
             }
         }
     }
@@ -111,26 +115,20 @@ public class AuthStorage {
     public static void load() {
         Properties props = new Properties();
         try {
-            if (Files.exists(CONFIG_PATH)) {
-                try (InputStream is = Files.newInputStream(CONFIG_PATH)) {
-                    props.load(is);
-                }
-            } else {
-                props.setProperty("password", "");
-                props.setProperty("webhook_url", "");
-                props.setProperty("admin_webhook_url", "");
-                props.setProperty("timeout_seconds", "180");
-                try (OutputStream os = Files.newOutputStream(CONFIG_PATH)) {
-                    props.store(os, "Auth Mod Config");
-                }
+            if (!Files.exists(CONFIG_PATH))
+                writeDefaultConfig();
+            try (Reader r = Files.newBufferedReader(CONFIG_PATH, StandardCharsets.UTF_8)) {
+                props.load(r);
             }
 
-            serverPassword = props.getProperty("password");
-            webhookUrl = props.getProperty("webhook_url");
-            adminWebhookUrl = props.getProperty("admin_webhook_url");
+            serverPassword = props.getProperty("password", "");
+            webhookUrl = props.getProperty("webhook_url", "");
+            adminWebhookUrl = props.getProperty("admin_webhook_url", "");
+            loginTitle = props.getProperty("login_title", Messages.LOGIN_DEFAULT_TITLE);
+            loginDescription = props.getProperty("login_description", Messages.LOGIN_DEFAULT_DESCRIPTION);
             timeoutSec = Helpers.numberOrDefault(props.getProperty("timeout_seconds"), 180);
 
-            if (serverPassword == null || serverPassword.isEmpty()) {
+            if (serverPassword.isEmpty()) {
                 PasswordMod.LOGGER.error(
                         "Auth mod has no password configured at {}. Set 'password=' in the file "
                         + "to a non-empty value — until then no player can authenticate.",
@@ -152,6 +150,49 @@ public class AuthStorage {
             }
         }
         loadSessionsFromFile();
+    }
+
+    private static void writeDefaultConfig() throws IOException {
+        // Written manually (not via Properties.store) so per-key comments survive for
+        // admins reading the file. UTF-8 so § color codes round-trip through editors.
+        String generatedPassword = Helpers.generateDefaultPassword();
+        String content = """
+                # One Password Auth — server config
+                #
+                # password
+                #   Required. The shared password everyone uses with /login.
+                #   A random phonetic password is generated on first run — change it below if you want.
+                #
+                # webhook_url
+                #   Public Discord channel (player activity feed).
+                #   Logs: joins, login attempts (including what the player typed),
+                #         auth successes, timeouts, advancements by authed players.
+                #
+                # admin_webhook_url
+                #   Admin/security Discord channel.
+                #   Logs: server start / stop / crash, all connect & disconnect events,
+                #         unauthorized advancements (advancements earned while unauthed).
+                #
+                # login_title
+                #   Big title shown on the lockdown screen. Supports § color codes.
+                #
+                # login_description
+                #   Subtitle under the title. Supports § color codes.
+                #
+                # timeout_seconds
+                #   Kick unauthenticated players after this many seconds of inactivity.
+
+                password=%s
+                webhook_url=
+                admin_webhook_url=
+                login_title=§6Welcome and Incredible!
+                login_description=§7Identify yourself or perish.
+                timeout_seconds=180
+                """.formatted(generatedPassword);
+        Files.writeString(CONFIG_PATH, content, StandardCharsets.UTF_8);
+        PasswordMod.LOGGER.info(
+                "No config file found — generated default /login password: {}  (edit {} to change it)",
+                generatedPassword, CONFIG_PATH);
     }
 
     // --------- Session Management ---------

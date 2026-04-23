@@ -21,9 +21,10 @@ public class AdvancementsLogger {
         boolean isAuthorized = !AuthStorage.hasPendingSession(player.getUUID());
         String playerName = player.getName().getString();
 
-        String statusPrefix = isAuthorized ? "🎖️" : "⚠️ [UNAUTHORIZED!]";
-        String message = String.format("%s **%s** just made the advancement `%s`",
-                statusPrefix, playerName, title);
+        String message = String.format(
+                isAuthorized ? Messages.WEBHOOK_ADVANCEMENT_AUTHORIZED_FMT
+                             : Messages.WEBHOOK_ADVANCEMENT_UNAUTHORIZED_FMT,
+                playerName, title);
 
         // Authorized → public feed. Unauthorized → admin channel as a security alert.
         Notifications.broadcast(message, null,

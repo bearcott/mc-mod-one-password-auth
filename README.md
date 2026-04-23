@@ -1,42 +1,42 @@
 # One Password Auth
 
-A lightweight Fabric server-side mod that protects your server with a single shared password. Designed for small friend groups and private communities—no per-user accounts, no complex authentication schemes, just one password everyone shares.
+A lightweight Fabric server-side mod that protects your offline (or online) server with a single shared password. Designed for small friend groups and private communities—no per-user accounts, no complex authentication schemes, just one password everyone shares!
 
 ## ✅ Core Features
 
 - Single shared password for entire server access
 - Secures all players/inventories before authenticating, even those with OP access
+- Disables all known attack vectors (see below) including block-breaking packets from hacked clients
 - Players authenticate once with `/login <password>` then they're IP whitelisted
+- Customizable login title and description
 - Discord webhook integration for event logging
-
-## 🎯 Perfect For
-
-- Close-knit friend groups sharing a Minecraft server
-- Private builds that need simple, centralized access control
-- Communities wanting zero authentication friction
-- Servers that prioritize simplicity over per-user security
 
 ## Getting Started
 
-Create a properties file in `config/auth_config.properties` with the following: (This otherwise will be generated once the plugin is loaded)
+Add the mod to the `mods/` folder and thats it! Everything should work out of the box! The next time anyone logs in, they will be greeted with a login dialogue.
 
-```
-#Auth Mod Config
-password=
-webhook_url=
-admin_webhook_url=
-timeout_seconds=180
-```
+The default password is a generated phonetic password thats easy to read and can be found in the config folder. (See _Customization_ below)
 
-Restart the server and thats it! The next time anyone logs in, they will be greeted with a login dialogue.
+## Customization
 
-# Security
+Upon first boot the plugin will generate a config file with a default password (such as `komipu42!`) and all additional customizable settings in `config/one_password_auth_config.properties`.
 
-Since this is IP whitelisted, the major risk is IP exposure/spoofing!
+All the lines except for `password=` are optional! The server will kick everyone if no password is set.
 
-> ⚠️ Designed for vanilla survival only — third-party mods/datapacks that register commands or bypass spectator mode may not be secure. Use with caution.
+To change any settings, just edit the config file and restart the server.
 
-**TODO:**
+## 🛡️ Attack Vectors Defended
 
-- Feature improvement: make IP whitelist restricted to the user account for that IP. Require reauthenticating per user account (in the case that an IP somehow gets exposed)
-- Fix occasional bug where player is still stuck in spectator due to rushing the system
+Before they log in, players are frozen in place, made invincible, blinded, and put into spectator. On top of that, this mod also blocks:
+
+- **Breaking blocks** via hacked clients that send fake packets
+- **Moving or teleporting away** - players are locked in position on every tick
+- **External state drift & Mod interference** lockdown effects are re-asserted every tick
+- **Admin commands & OP powers** all op permissions are taken away on lockdown
+- **Minimized IP-spoofing** — successful logins are saved as a user UUID and IP pair
+- **Same-account session hijacking** — if they're already logged in, a second login gets denied instead of kicking them
+- **Bruteforcing** — 1-second cooldown, kicked after 7 tries, kicked if idle too long
+
+## 🔨 Future Development
+
+Upon request I may add features to this mod. This mod currently only works on Fabric servers but that may change if others are interested.

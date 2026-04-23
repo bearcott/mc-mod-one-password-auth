@@ -42,7 +42,9 @@ public class Notifications {
             try {
                 Helpers.Location loc = (ip != null) ? Helpers.fetchLocationData(ip) : null;
                 String content = message
-                        + (loc != null && ip != null ? "\n📍 IP: `" + ip + "` (" + loc.full() + ")" : "");
+                        + (loc != null && ip != null
+                                ? String.format(Messages.WEBHOOK_IP_SUFFIX_FMT, ip, loc.full())
+                                : "");
                 // Use Gson to build the payload — naive string escaping missed backslashes
                 // and control chars, which let malformed inputs break webhooks silently.
                 String body = GSON.toJson(Map.of("content", content));
