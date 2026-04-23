@@ -1,6 +1,6 @@
 # Automatically builds and publishes a release when a new tag is pushed.
 # NOTE: Set up MODRINTH_TOKEN and MODRINTH_PROJECT_ID in the repository secrets and variables respectively before using this workflow.
-# commit changes then push via `git tag v1.0.* && git push origin main --follow-tags`
+# commit changes then push via `git tag v1.0.* && git push origin v1.0.*`
 
 name: Release
 
