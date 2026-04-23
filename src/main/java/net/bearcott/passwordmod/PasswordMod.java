@@ -36,13 +36,13 @@ public class PasswordMod implements ModInitializer {
         AuthStorage.load();
 
         ServerStatusLogger.register();
-        LockdownGuards.register();
+        PlayerLockdownHandlers.registerGuards();
 
         // Ensure sessions are saved when the server shuts down
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> AuthStorage.saveSessionsToFile());
 
         ServerPlayConnectionEvents.JOIN.register(
-                (handler, sender, server) -> PlayerHandlers.handlePlayerJoin(handler.getPlayer(), WORKER_POOL));
+                (handler, sender, server) -> PlayerLockdownHandlers.handlePlayerJoin(handler.getPlayer(), WORKER_POOL));
 
         CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess,
                 environment) -> dispatcher.register(literal("login")
@@ -62,7 +62,7 @@ public class PasswordMod implements ModInitializer {
 
                                     // handle the login attempt asynchronously to avoid blocking the main server
                                     // thread
-                                    PlayerHandlers.handleLoginAttempt(player,
+                                    PlayerLockdownHandlers.handleLoginAttempt(player,
                                             MessageArgument.getMessage(context, "password").getString(), WORKER_POOL);
                                     return 1;
                                 }))));
@@ -78,10 +78,10 @@ public class PasswordMod implements ModInitializer {
                 AuthStorage.PlayerSession session = AuthStorage.getPendingSession(player.getUUID());
 
                 // If are whitelisted, lift their lockdown and skip the rest
-                if (AuthStorage.isWhitelisted(player.getIpAddress())) {
+                if (AuthStorage.isWhitelisted(player.getIpAddress(), player.getUUID())) {
                     // If they somehow still have the lockdown, lift it
                     if (session != null)
-                        PlayerHandlers.liftLockdown(player, session);
+                        PlayerLockdownHandlers.liftLockdown(player, session);
                     continue;
                 }
 
@@ -104,12 +104,12 @@ public class PasswordMod implements ModInitializer {
                         Cosmetics.sendAuthTitle(player);
 
                     // hold all pending players in place
-                    PlayerHandlers.restrictMovement(player, session);
+                    PlayerLockdownHandlers.restrictMovement(player, session);
                 }
 
                 // If they have no session at all and aren't whitelisted, apply lockdown
                 if (session == null && player.isAlive()) {
-                    PlayerHandlers.applyLockdown(player);
+                    PlayerLockdownHandlers.applyLockdown(player);
                 }
             }
         });

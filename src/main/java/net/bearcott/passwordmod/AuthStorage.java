@@ -25,7 +25,7 @@ public class AuthStorage {
     private static final File SESSIONS_FILE = FabricLoader.getInstance().getConfigDir().resolve("auth_sessions.json")
             .toFile();
 
-    private static final Set<String> whitelistedIPs = new HashSet<>();
+    private static final Set<String> whitelistedPairs = new HashSet<>();
     private static final Map<UUID, PlayerSession> SESSIONS = new ConcurrentHashMap<>();
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final ExecutorService SAVE_EXECUTOR = Executors.newSingleThreadExecutor();
@@ -126,7 +126,11 @@ public class AuthStorage {
 
         if (Files.exists(IP_PATH)) {
             try {
-                whitelistedIPs.addAll(Files.readAllLines(IP_PATH));
+                for (String line : Files.readAllLines(IP_PATH)) {
+                    // Legacy format was ip-only; require ip|uuid now so the pair is proven.
+                    if (line.contains("|"))
+                        whitelistedPairs.add(line);
+                }
             } catch (IOException e) {
                 PasswordMod.LOGGER.error("Something went wrong!", e);
             }
@@ -165,18 +169,26 @@ public class AuthStorage {
 
     // --------- Whitelist ---------
 
-    public static void whitelistIP(String ip) {
-        if (whitelistedIPs.add(ip)) {
+    public static void whitelist(String ip, UUID uuid) {
+        if (ip == null || uuid == null)
+            return;
+        if (whitelistedPairs.add(pairKey(ip, uuid))) {
             try {
-                Files.write(IP_PATH, whitelistedIPs, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+                Files.write(IP_PATH, whitelistedPairs, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
             } catch (IOException e) {
                 PasswordMod.LOGGER.error("Something went wrong!", e);
             }
         }
     }
 
-    public static boolean isWhitelisted(String ip) {
-        return whitelistedIPs.contains(ip);
+    public static boolean isWhitelisted(String ip, UUID uuid) {
+        if (ip == null || uuid == null)
+            return false;
+        return whitelistedPairs.contains(pairKey(ip, uuid));
+    }
+
+    private static String pairKey(String ip, UUID uuid) {
+        return ip + "|" + uuid;
     }
 
     // --------- Persistence ---------

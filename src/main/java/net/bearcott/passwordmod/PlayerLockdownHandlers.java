@@ -4,6 +4,7 @@ import net.bearcott.passwordmod.util.Cosmetics;
 import net.bearcott.passwordmod.util.Helpers;
 import net.bearcott.passwordmod.util.Messages;
 import net.bearcott.passwordmod.util.Notifications;
+import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -14,6 +15,7 @@ import net.minecraft.server.permissions.LevelBasedPermissionSet;
 import net.minecraft.server.permissions.PermissionLevel;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.portal.TeleportTransition;
 import net.minecraft.world.phys.Vec3;
@@ -21,10 +23,10 @@ import net.minecraft.world.phys.Vec3;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 
-public class PlayerHandlers {
+public class PlayerLockdownHandlers {
     public static void handlePlayerJoin(ServerPlayer player, ExecutorService workerPool) {
         String ip = player.getIpAddress();
-        boolean isWhitelisted = AuthStorage.isWhitelisted(ip);
+        boolean isWhitelisted = AuthStorage.isWhitelisted(ip, player.getUUID());
 
         String msg = "⚠️ **" + player.getScoreboardName() + "** joined "
                 + (isWhitelisted ? "(Whitelisted)" : "(New Session)");
@@ -57,7 +59,7 @@ public class PlayerHandlers {
         session.lastAttemptTime = System.currentTimeMillis();
 
         if (input.equals(AuthStorage.serverPassword)) {
-            AuthStorage.whitelistIP(ip);
+            AuthStorage.whitelist(ip, uuid);
             liftLockdown(player, session);
 
             Cosmetics.loginSuccessEffects(player);
@@ -175,5 +177,29 @@ public class PlayerHandlers {
             player.teleport(new TeleportTransition(sl, s.joinPos, Vec3.ZERO, player.getYRot(), player.getXRot(),
                     TeleportTransition.DO_NOTHING));
         }
+    }
+
+    // ---- Lockdown action guards ----
+    // Registered once at startup. Each event fires for every player, and the
+    // handler runtime-checks isLocked(player) to decide whether to cancel.
+
+    public static void registerGuards() {
+        PlayerBlockBreakEvents.BEFORE.register((level, player, pos, state, entity) -> allowOrDeny(player));
+    }
+
+    private static boolean allowOrDeny(Player player) {
+        if (!isLocked(player))
+            return true;
+        if (player instanceof ServerPlayer sp)
+            sp.sendSystemMessage(Component.literal(Messages.LOCKDOWN_DENIED));
+        return false;
+    }
+
+    private static boolean isLocked(Player player) {
+        if (!(player instanceof ServerPlayer sp))
+            return false;
+        UUID uuid = sp.getUUID();
+        return !AuthStorage.isWhitelisted(sp.getIpAddress(), uuid)
+                && AuthStorage.hasPendingSession(uuid);
     }
 }
