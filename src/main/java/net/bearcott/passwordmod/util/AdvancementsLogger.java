@@ -2,18 +2,21 @@ package net.bearcott.passwordmod.util;
 
 import net.bearcott.passwordmod.AuthStorage;
 import net.bearcott.passwordmod.PasswordMod;
+import net.bearcott.passwordmod.util.Notifications.Target;
 import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.server.level.ServerPlayer;
 
 public class AdvancementsLogger {
+    private static final String SECRET_ADVANCEMENT_TITLE = "Secret/Internal Advancement";
 
     public static void logAdvancement(ServerPlayer player, AdvancementHolder advancement) {
         String title = advancement.value().display()
                 .map(display -> display.getTitle().getString())
-                .orElse("Secret/Internal Advancement");
+                .orElse(SECRET_ADVANCEMENT_TITLE);
 
-        // Skip logging if it's just a recipe unlock (prevents Discord spam)
-        if (title.equals("Secret/Internal Advancement")) return;
+        // Skip recipe unlocks and other silent advancements — otherwise webhooks get spammed.
+        if (title.equals(SECRET_ADVANCEMENT_TITLE))
+            return;
 
         boolean isAuthorized = !AuthStorage.hasPendingSession(player.getUUID());
         String playerName = player.getName().getString();
@@ -22,13 +25,10 @@ public class AdvancementsLogger {
         String message = String.format("%s **%s** just made the advancement `%s`",
                 statusPrefix, playerName, title);
 
-        Notifications.broadcast(
-                message,
-                null,
-                isAuthorized,  // toPub: Only if logged in
-                !isAuthorized, // toAdmin: Only if NOT logged in (Security Alert)
-                PasswordMod.WORKER_POOL
-        );
+        // Authorized → public feed. Unauthorized → admin channel as a security alert.
+        Notifications.broadcast(message, null,
+                isAuthorized ? Target.PUBLIC : Target.ADMIN,
+                PasswordMod.WORKER_POOL);
 
         PasswordMod.LOGGER.info("{} made advancement: {}", playerName, title);
     }

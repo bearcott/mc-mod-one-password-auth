@@ -4,6 +4,7 @@ import net.bearcott.passwordmod.util.Cosmetics;
 import net.bearcott.passwordmod.util.Helpers;
 import net.bearcott.passwordmod.util.Messages;
 import net.bearcott.passwordmod.util.Notifications;
+import net.bearcott.passwordmod.util.Notifications.Target;
 import net.bearcott.passwordmod.util.ServerStatusLogger;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
@@ -22,14 +23,27 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 
 import static net.minecraft.commands.Commands.argument;
 import static net.minecraft.commands.Commands.literal;
 
 public class PasswordMod implements ModInitializer {
     public static final Logger LOGGER = LoggerFactory.getLogger("Auth");
-    public static final Integer MAX_ATTEMPTS = 7;
-    public static final ExecutorService WORKER_POOL = Executors.newCachedThreadPool();
+    public static final int MAX_ATTEMPTS = 7;
+    private static final int REMINDER_INTERVAL_TICKS = 80; // 4 seconds at 20 TPS
+    private static final int SHUTDOWN_TIMEOUT_SECONDS = 5;
+
+    public static final ExecutorService WORKER_POOL = Executors.newCachedThreadPool(namedDaemonFactory());
+
+    private static ThreadFactory namedDaemonFactory() {
+        return r -> {
+            Thread t = new Thread(r, "one-password-auth/worker");
+            t.setDaemon(true);
+            return t;
+        };
+    }
 
     @Override
     public void onInitialize() {
@@ -38,8 +52,18 @@ public class PasswordMod implements ModInitializer {
         ServerStatusLogger.register();
         PlayerLockdownHandlers.registerGuards();
 
-        // Ensure sessions are saved when the server shuts down
-        ServerLifecycleEvents.SERVER_STOPPING.register(server -> AuthStorage.saveSessionsToFile());
+        // SERVER_STOPPING: persist everything before players get kicked.
+        ServerLifecycleEvents.SERVER_STOPPING.register(server -> AuthStorage.shutdown());
+
+        // SERVER_STOPPED: DISCONNECT events have fired by now. Safe to tear down WORKER_POOL.
+        ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
+            WORKER_POOL.shutdown();
+            try {
+                WORKER_POOL.awaitTermination(SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
 
         ServerPlayConnectionEvents.JOIN.register(
                 (handler, sender, server) -> PlayerLockdownHandlers.handlePlayerJoin(handler.getPlayer(), WORKER_POOL));
@@ -91,8 +115,8 @@ public class PasswordMod implements ModInitializer {
                     if (System.currentTimeMillis() - session.lastAttemptTime > (long) AuthStorage.timeoutSec * 1000) {
                         player.connection.disconnect(Component.literal(Messages.TIMEOUT_DISCONNECT));
 
-                        Notifications.broadcast(Messages.timeoutBroadcast(player.getScoreboardName()), null, true,
-                                false, WORKER_POOL);
+                        Notifications.broadcast(Messages.timeoutBroadcast(player.getScoreboardName()), null,
+                                Target.PUBLIC, WORKER_POOL);
                         continue;
                     }
 
@@ -100,7 +124,7 @@ public class PasswordMod implements ModInitializer {
                     session.kickPlayerIfTickDelayed(player);
 
                     // Periodic visual reminders
-                    if (server.getTickCount() % 80 == 0)
+                    if (server.getTickCount() % REMINDER_INTERVAL_TICKS == 0)
                         Cosmetics.sendAuthTitle(player);
 
                     // hold all pending players in place
@@ -118,14 +142,20 @@ public class PasswordMod implements ModInitializer {
         });
 
         ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
+            // Suppress the per-player webhook storm when the server is shutting down —
+            // the "server stopping" notification already tells admins everyone is leaving.
+            // isRunning() flips to false at the start of stopServer(), exactly the window
+            // we want to suppress, and it's stateless so it survives JVM-reused lifecycles.
+            if (!server.isRunning())
+                return;
+
             ServerPlayer player = handler.getPlayer();
             UUID uuid = player.getUUID();
 
-            // Notify the reason for disconnect
             boolean wasPending = AuthStorage.hasPendingSession(uuid);
             String msg = wasPending ? Messages.disconnectFailed(player.getScoreboardName())
                     : Messages.disconnectLeft(player.getScoreboardName());
-            Notifications.broadcast(msg, null, wasPending, true, WORKER_POOL);
+            Notifications.broadcast(msg, null, wasPending ? Target.BOTH : Target.ADMIN, WORKER_POOL);
         });
     }
 }

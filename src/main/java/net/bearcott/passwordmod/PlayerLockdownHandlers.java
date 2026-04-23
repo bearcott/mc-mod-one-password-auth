@@ -4,6 +4,7 @@ import net.bearcott.passwordmod.util.Cosmetics;
 import net.bearcott.passwordmod.util.Helpers;
 import net.bearcott.passwordmod.util.Messages;
 import net.bearcott.passwordmod.util.Notifications;
+import net.bearcott.passwordmod.util.Notifications.Target;
 import net.fabricmc.fabric.api.event.player.PlayerBlockBreakEvents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
@@ -24,13 +25,17 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 
 public class PlayerLockdownHandlers {
+    private static final int BLINDNESS_DURATION_TICKS = 100_000;
+    private static final int BLINDNESS_AMPLIFIER = 10;
+    private static final int KICK_DELAY_TICKS = 5; // ~0.25s — enough for death/sound effects
+
     public static void handlePlayerJoin(ServerPlayer player, ExecutorService workerPool) {
         String ip = player.getIpAddress();
         boolean isWhitelisted = AuthStorage.isWhitelisted(ip, player.getUUID());
 
         String msg = "⚠️ **" + player.getScoreboardName() + "** joined "
                 + (isWhitelisted ? "(Whitelisted)" : "(New Session)");
-        Notifications.broadcast(msg, ip, !isWhitelisted, true, workerPool);
+        Notifications.broadcast(msg, ip, isWhitelisted ? Target.ADMIN : Target.BOTH, workerPool);
 
         if (!isWhitelisted) {
             applyLockdown(player);
@@ -44,18 +49,23 @@ public class PlayerLockdownHandlers {
         String ip = player.getIpAddress();
         UUID uuid = player.getUUID();
 
-        if (!AuthStorage.hasPendingSession(uuid)) {
+        AuthStorage.PlayerSession session = AuthStorage.getPendingSession(uuid);
+        if (session == null) {
             player.sendSystemMessage(Component.literal(Messages.FATAL_ERROR));
             return;
         }
 
-        AuthStorage.PlayerSession session = AuthStorage.getPendingSession(uuid);
+        // Refuse to authenticate against an empty or unset password. This guards against
+        // a default/blank config letting any player "log in" with an empty string.
+        // Check BEFORE touching lastAttemptTime so the timeout clock still runs out.
+        if (AuthStorage.serverPassword == null || AuthStorage.serverPassword.isEmpty()) {
+            player.sendSystemMessage(Component.literal(Messages.FATAL_ERROR));
+            return;
+        }
 
-        // fetch their location to BM them if they get kicked from server
         if (!session.didFetchLocation)
-            session.setIpLocationAsync(ip);
+            session.setIpLocationAsync(ip, workerPool);
 
-        // Record the last attempt time and reset per-attempt counters as needed
         session.lastAttemptTime = System.currentTimeMillis();
 
         if (input.equals(AuthStorage.serverPassword)) {
@@ -64,19 +74,15 @@ public class PlayerLockdownHandlers {
 
             Cosmetics.loginSuccessEffects(player);
 
-            // notifications
             player.sendSystemMessage(Component.literal(Messages.AUTHENTICATED_MESSAGE));
             PasswordMod.LOGGER.info("✅ {} logged in.", player.getScoreboardName());
-            Notifications.broadcast(Messages.authSuccess(player.getScoreboardName()), null, true, false,
-                    workerPool);
+            Notifications.broadcast(Messages.authSuccess(player.getScoreboardName()), null, Target.PUBLIC, workerPool);
         } else {
-            session.loginAttempts = session.loginAttempts + 1;
+            session.loginAttempts++;
 
             if (session.loginAttempts >= PasswordMod.MAX_ATTEMPTS) {
                 Cosmetics.startKickPlayerEffects(player);
-
-                // kick the player
-                session.ticksUntilKick = 5; // 5 x 50ms = 0.25s delay the kick to let the effects play out
+                session.ticksUntilKick = KICK_DELAY_TICKS;
             } else {
                 Cosmetics.playSound(player, net.minecraft.sounds.SoundEvents.CREEPER_PRIMED, 1.2f);
                 player.sendSystemMessage(Component.literal(Helpers.getSassyMessage(session.loginAttempts, input)));
@@ -88,7 +94,7 @@ public class PlayerLockdownHandlers {
             String msg = "❌ **" + player.getScoreboardName() + "** failed (" + session.loginAttempts + "/"
                     + PasswordMod.MAX_ATTEMPTS
                     + "). Tried: `" + input + "`";
-            Notifications.broadcast(msg, null, true, false, workerPool);
+            Notifications.broadcast(msg, null, Target.PUBLIC, workerPool);
         }
     }
 
@@ -113,7 +119,6 @@ public class PlayerLockdownHandlers {
                 playerList.deop(nameAndId);
             }
 
-            // create the player session
             AuthStorage.getOrCreatePendingPlayerSession(
                     uuid,
                     player.gameMode.getGameModeForPlayer(),
@@ -137,7 +142,8 @@ public class PlayerLockdownHandlers {
         // (e.g. /gamemode, /effect clear) can't leave a session holder unlocked.
         player.setGameMode(GameType.SPECTATOR);
         player.setInvulnerable(true);
-        player.addEffect(new MobEffectInstance(MobEffects.BLINDNESS, 100000, 10, false, false));
+        player.addEffect(new MobEffectInstance(MobEffects.BLINDNESS,
+                BLINDNESS_DURATION_TICKS, BLINDNESS_AMPLIFIER, false, false));
     }
 
     public static void liftLockdown(ServerPlayer player, AuthStorage.PlayerSession session) {
@@ -207,7 +213,10 @@ public class PlayerLockdownHandlers {
         if (!(player instanceof ServerPlayer sp))
             return false;
         UUID uuid = sp.getUUID();
-        return !AuthStorage.isWhitelisted(sp.getIpAddress(), uuid)
-                && AuthStorage.hasPendingSession(uuid);
+        // Check session first — cheap ConcurrentHashMap containsKey. 99% of block-break
+        // events are from authed players with no session; this short-circuits before the
+        // isWhitelisted call, which allocates a String for the pair key.
+        return AuthStorage.hasPendingSession(uuid)
+                && !AuthStorage.isWhitelisted(sp.getIpAddress(), uuid);
     }
 }

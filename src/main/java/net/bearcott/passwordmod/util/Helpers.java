@@ -13,6 +13,9 @@ import net.bearcott.passwordmod.PasswordMod;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 public class Helpers {
+    private static final int LOCATION_LOOKUP_TIMEOUT_MS = 5000;
+    private static final long RATE_LIMIT_WINDOW_MS = 1000L;
+
     public static record Location(String city, String country) {
         public String full() {
             return city + ", " + country;
@@ -32,7 +35,8 @@ public class Helpers {
             URL url = URI.create("http://ip-api.com/csv/" + ip.split(":")[0].replace("/", "") + "?fields=city,country")
                     .toURL();
             HttpURLConnection c = (HttpURLConnection) url.openConnection();
-            c.setConnectTimeout(5000);
+            c.setConnectTimeout(LOCATION_LOOKUP_TIMEOUT_MS);
+            c.setReadTimeout(LOCATION_LOOKUP_TIMEOUT_MS);
             try (BufferedReader r = new BufferedReader(new InputStreamReader(c.getInputStream(), UTF_8))) {
                 String l = r.readLine();
                 if (l != null && l.contains(",")) {
@@ -49,11 +53,9 @@ public class Helpers {
 
     public static boolean isRateLimited(UUID uuid) {
         AuthStorage.PlayerSession s = AuthStorage.getPendingSession(uuid);
-        long now = System.currentTimeMillis();
-        long last = s.lastAttemptTime;
-        if (now - last < 1000)
-            return true;
-        return false;
+        if (s == null)
+            return false;
+        return System.currentTimeMillis() - s.lastAttemptTime < RATE_LIMIT_WINDOW_MS;
     }
 
     public static boolean check67Answer(String input) {

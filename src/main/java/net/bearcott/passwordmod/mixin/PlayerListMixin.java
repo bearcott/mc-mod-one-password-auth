@@ -27,6 +27,9 @@ public abstract class PlayerListMixin {
         ServerPlayer existing = self.getPlayer(profile.id());
         if (existing == null)
             return;
+        // Dead connection still in the player list — let vanilla clean up and accept the reconnect.
+        if (existing.hasDisconnected())
+            return;
         if (AuthStorage.hasPendingSession(profile.id()))
             return;
         cir.setReturnValue(Component.literal(
