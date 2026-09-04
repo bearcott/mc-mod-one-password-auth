@@ -10,7 +10,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.*;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundSource;
-import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EntityTypes;
 import net.minecraft.world.entity.LightningBolt;
 
 public class Cosmetics {
@@ -38,7 +38,7 @@ public class Cosmetics {
 
     public static void spawnLightning(ServerPlayer player) {
         if (player.level() instanceof ServerLevel sl) {
-            LightningBolt bolt = new LightningBolt(EntityType.LIGHTNING_BOLT, sl);
+            LightningBolt bolt = new LightningBolt(EntityTypes.LIGHTNING_BOLT, sl);
             bolt.setPos(player.getX(), player.getY(), player.getZ());
             bolt.setVisualOnly(true);
             sl.addFreshEntity(bolt);
