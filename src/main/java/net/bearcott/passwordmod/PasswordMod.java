@@ -53,7 +53,16 @@ public class PasswordMod implements ModInitializer {
         PlayerLockdownHandlers.registerGuards();
 
         // SERVER_STOPPING: persist everything before players get kicked.
-        ServerLifecycleEvents.SERVER_STOPPING.register(server -> AuthStorage.shutdown());
+        // Also runs before vanilla's final saveAll, so pending players still online are saved
+        // with their real state (PlayerListMixin covers the normal disconnect path).
+        ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
+            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                AuthStorage.PlayerSession session = AuthStorage.getPendingSession(player.getUUID());
+                if (session != null)
+                    PlayerLockdownHandlers.suspendLockdown(player, session);
+            }
+            AuthStorage.shutdown();
+        });
 
         // SERVER_STOPPED: DISCONNECT events have fired by now. Safe to tear down WORKER_POOL.
         ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
@@ -160,4 +169,4 @@ public class PasswordMod implements ModInitializer {
             Notifications.broadcast(msg, null, wasPending ? Target.BOTH : Target.ADMIN, WORKER_POOL);
         });
     }
-}
+}

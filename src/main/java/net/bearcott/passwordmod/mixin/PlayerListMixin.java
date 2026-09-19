@@ -1,6 +1,7 @@
 package net.bearcott.passwordmod.mixin;
 
 import net.bearcott.passwordmod.AuthStorage;
+import net.bearcott.passwordmod.PlayerLockdownHandlers;
 import net.bearcott.passwordmod.util.Messages;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -9,6 +10,7 @@ import net.minecraft.server.players.PlayerList;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.net.SocketAddress;
@@ -36,5 +38,14 @@ public abstract class PlayerListMixin {
         if (AuthStorage.hasPendingSession(profile.id()))
             return;
         cir.setReturnValue(Component.literal(Messages.DUPLICATE_LOGIN_DENIED));
+    }
+
+    // remove() saves the player's data before anything else; put their real state back first so
+    // the lockdown is never written to their playerdata or ops.json.
+    @Inject(method = "remove", at = @At("HEAD"))
+    private void onePasswordAuth$suspendLockdownBeforeSave(ServerPlayer player, CallbackInfo ci) {
+        AuthStorage.PlayerSession session = AuthStorage.getPendingSession(player.getUUID());
+        if (session != null)
+            PlayerLockdownHandlers.suspendLockdown(player, session);
     }
 }

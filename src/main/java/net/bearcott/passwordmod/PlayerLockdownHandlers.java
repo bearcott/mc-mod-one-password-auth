@@ -135,6 +135,13 @@ public class PlayerLockdownHandlers {
         AuthStorage.PlayerSession session = AuthStorage.getPendingSession(player.getUUID());
         if (session != null) {
             session.resetLockdownTimer();
+            // suspendLockdown gave a pending op their op back when they left; take it away again.
+            if (session.wasOp && player.level() instanceof ServerLevel sl) {
+                var profile = player.getGameProfile();
+                var nameAndId = new NameAndId(profile.id(), profile.name());
+                if (sl.getServer().getPlayerList().isOp(nameAndId))
+                    sl.getServer().getPlayerList().deop(nameAndId);
+            }
         } else {
             createPendingPlayerSession(player);
         }
@@ -150,7 +157,30 @@ public class PlayerLockdownHandlers {
     public static void liftLockdown(ServerPlayer player, AuthStorage.PlayerSession session) {
         UUID uuid = player.getUUID();
 
+        restoreVanillaState(player, session);
+        if (session.wasOp) {
+            player.sendSystemMessage(Component.literal(
+                    String.format(Messages.WELCOME_BACK_FMT, player.getGameProfile().name(), session.opLevel)));
+        }
+
+        AuthStorage.removePendingSession(uuid);
+        Cosmetics.resetTitle(player);
+    }
+
+    /**
+     * Called right before vanilla saves a pending player (disconnect or server stop). Puts their
+     * real game mode, vulnerability, effects and op back, so the lockdown never reaches their
+     * playerdata or ops.json. The session is kept, so rejoining locks them down again. This way
+     * removing the mod can't strand anyone as a blind, invulnerable spectator or de-opped.
+     */
+    public static void suspendLockdown(ServerPlayer player, AuthStorage.PlayerSession session) {
+        restoreVanillaState(player, session);
+    }
+
+    private static void restoreVanillaState(ServerPlayer player, AuthStorage.PlayerSession session) {
         player.setGameMode(session.originalMode);
+        player.setInvulnerable(false);
+        player.removeEffect(MobEffects.BLINDNESS);
 
         if (session.wasOp && player.level() instanceof ServerLevel sl) {
             var profile = player.getGameProfile();
@@ -165,18 +195,7 @@ public class PlayerLockdownHandlers {
             sl.getServer().getPlayerList().sendPlayerPermissionLevel(player);
             sl.getServer().getCommands().sendCommands(player);
             player.onUpdateAbilities();
-
-            player.sendSystemMessage(Component.literal(
-                    String.format(Messages.WELCOME_BACK_FMT, nameAndId.name(), session.opLevel)));
         }
-
-        // remove any lockdown effects regardless of session, if this is called w/o a
-        // session, things like game mode and op won't be restored
-        AuthStorage.removePendingSession(uuid);
-        player.setInvulnerable(false);
-        player.removeEffect(MobEffects.BLINDNESS);
-
-        Cosmetics.resetTitle(player);
     }
 
     public static void reassertIfDrifted(ServerPlayer player) {
