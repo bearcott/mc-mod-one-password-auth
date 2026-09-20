@@ -6,11 +6,6 @@ import com.google.gson.reflect.TypeToken;
 
 import net.bearcott.passwordmod.util.Helpers;
 import net.bearcott.passwordmod.util.Messages;
-import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.network.chat.Component;
-import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.level.GameType;
-import net.minecraft.world.phys.Vec3;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -21,12 +16,11 @@ import java.util.*;
 import java.util.concurrent.*;
 
 public class AuthStorage {
-    private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir()
-            .resolve("one_password_auth_config.properties");
-    private static final Path IP_PATH = FabricLoader.getInstance().getConfigDir()
-            .resolve("one_password_auth_ip_whitelist.txt");
-    private static final File SESSIONS_FILE = FabricLoader.getInstance().getConfigDir()
-            .resolve("one_password_auth_sessions.json").toFile();
+    // Set by load(): Fabric's config/ folder, or the plugin's data folder on Paper. The file
+    // names are the same on both, so the files can be copied across as-is.
+    private static Path CONFIG_PATH;
+    private static Path IP_PATH;
+    private static File SESSIONS_FILE;
 
     private static final int SHUTDOWN_TIMEOUT_SECONDS = 5;
 
@@ -53,11 +47,11 @@ public class AuthStorage {
 
     public static class PlayerSession {
         // Persistent fields (saved to JSON)
-        public GameType originalMode;
+        public GameMode originalMode;
         public boolean wasOp;
         public int opLevel;
         public long joinTime; // the first join time until successful login
-        public Vec3 joinPos;
+        public Pos joinPos;
         public volatile String ip; // written from network worker; read from main thread
 
         // Transient fields (RAM only, reset on restart).
@@ -69,9 +63,9 @@ public class AuthStorage {
         public transient volatile boolean didFetchLocation;
         public transient int ticksUntilKick = -1; // delay kick a few ticks so effects play out
 
-        public PlayerSession(GameType mode, boolean wasOp, int opLevel, Vec3 joinPos) {
+        public PlayerSession(GameMode mode, boolean wasOp, int opLevel, Pos joinPos) {
             // not entirely sure if this is necessary
-            this.originalMode = (mode != null) ? mode : GameType.SURVIVAL;
+            this.originalMode = (mode != null) ? mode : GameMode.SURVIVAL;
             this.wasOp = wasOp;
             this.opLevel = opLevel;
             this.joinTime = System.currentTimeMillis();
@@ -99,21 +93,29 @@ public class AuthStorage {
             });
         }
 
-        public void kickPlayerIfTickDelayed(ServerPlayer player) {
+        public void kickPlayerIfTickDelayed(AuthPlayer player) {
             if (this.ticksUntilKick > 0) {
                 this.ticksUntilKick--;
             } else if (this.ticksUntilKick == 0) {
                 this.ticksUntilKick = -1;
-                player.connection.disconnect(Component.literal(
-                        String.format(Messages.KICK_TERMINATED_FMT, this.ipLocation.city())));
+                player.kick(String.format(Messages.KICK_TERMINATED_FMT, this.ipLocation.city()));
             }
         }
     }
 
     // --------- Initialization ---------
 
-    public static void load() {
+    public static void load(Path configDir) {
+        CONFIG_PATH = configDir.resolve("one_password_auth_config.properties");
+        IP_PATH = configDir.resolve("one_password_auth_ip_whitelist.txt");
+        SESSIONS_FILE = configDir.resolve("one_password_auth_sessions.json").toFile();
+
         Properties props = new Properties();
+        try {
+            Files.createDirectories(configDir);
+        } catch (IOException e) {
+            AuthCore.LOGGER.error("Failed to create config folder {}", configDir, e);
+        }
         try {
             if (!Files.exists(CONFIG_PATH))
                 writeDefaultConfig();
@@ -129,13 +131,13 @@ public class AuthStorage {
             timeoutSec = Helpers.numberOrDefault(props.getProperty("timeout_seconds"), 180);
 
             if (serverPassword.isEmpty()) {
-                PasswordMod.LOGGER.error(
+                AuthCore.LOGGER.error(
                         "Auth mod has no password configured at {}. Set 'password=' in the file "
                         + "to a non-empty value — until then no player can authenticate.",
                         CONFIG_PATH);
             }
         } catch (IOException e) {
-            PasswordMod.LOGGER.error("Failed to load auth config at {}", CONFIG_PATH, e);
+            AuthCore.LOGGER.error("Failed to load auth config at {}", CONFIG_PATH, e);
         }
 
         if (Files.exists(IP_PATH)) {
@@ -146,7 +148,7 @@ public class AuthStorage {
                         whitelistedPairs.add(line);
                 }
             } catch (IOException e) {
-                PasswordMod.LOGGER.error("Failed to load whitelist at {}", IP_PATH, e);
+                AuthCore.LOGGER.error("Failed to load whitelist at {}", IP_PATH, e);
             }
         }
         loadSessionsFromFile();
@@ -190,7 +192,7 @@ public class AuthStorage {
                 timeout_seconds=180
                 """.formatted(generatedPassword);
         Files.writeString(CONFIG_PATH, content, StandardCharsets.UTF_8);
-        PasswordMod.LOGGER.info(
+        AuthCore.LOGGER.info(
                 "No config file found — generated default /login password: {}  (edit {} to change it)",
                 generatedPassword, CONFIG_PATH);
     }
@@ -202,8 +204,8 @@ public class AuthStorage {
      * Prevents overwriting original metadata if a player rejoins.
      */
 
-    public static PlayerSession getOrCreatePendingPlayerSession(UUID uuid, GameType mode, boolean wasOp, int opLevel,
-            Vec3 joinPos) {
+    public static PlayerSession getOrCreatePendingPlayerSession(UUID uuid, GameMode mode, boolean wasOp, int opLevel,
+            Pos joinPos) {
         PlayerSession ps = new PlayerSession(mode, wasOp, opLevel, joinPos);
         PlayerSession previous = SESSIONS.putIfAbsent(uuid, ps);
         if (previous != null)
@@ -246,7 +248,7 @@ public class AuthStorage {
                     Files.write(IP_PATH, snapshot,
                             StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
                 } catch (IOException e) {
-                    PasswordMod.LOGGER.error("Failed to write whitelist at {}", IP_PATH, e);
+                    AuthCore.LOGGER.error("Failed to write whitelist at {}", IP_PATH, e);
                 }
             });
         }
@@ -278,13 +280,13 @@ public class AuthStorage {
                 // (missing-field deserialization) so liftLockdown can't NPE later.
                 loaded.values().forEach(ps -> {
                     if (ps.originalMode == null)
-                        ps.originalMode = GameType.SURVIVAL;
+                        ps.originalMode = GameMode.SURVIVAL;
                     ps.resetLockdownTimer();
                 });
                 SESSIONS.putAll(loaded);
             }
         } catch (Exception e) {
-            PasswordMod.LOGGER.error("Failed to load sessions from {}", SESSIONS_FILE, e);
+            AuthCore.LOGGER.error("Failed to load sessions from {}", SESSIONS_FILE, e);
         }
     }
 
@@ -292,7 +294,7 @@ public class AuthStorage {
         try (Writer w = new FileWriter(SESSIONS_FILE)) {
             GSON.toJson(SESSIONS, w);
         } catch (IOException e) {
-            PasswordMod.LOGGER.error("Failed to save sessions to {}", SESSIONS_FILE, e);
+            AuthCore.LOGGER.error("Failed to save sessions to {}", SESSIONS_FILE, e);
         }
     }
 
@@ -309,7 +311,7 @@ public class AuthStorage {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         } catch (ExecutionException e) {
-            PasswordMod.LOGGER.error("Failed sync save of sessions", e);
+            AuthCore.LOGGER.error("Failed sync save of sessions", e);
         }
     }
 

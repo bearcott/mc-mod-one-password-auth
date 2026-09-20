@@ -1,0 +1,34 @@
+base {
+	archivesName = "${rootProject.archives_base_name}-paper"
+}
+
+repositories {
+	maven {
+		name = 'PaperMC'
+		url = 'https://repo.papermc.io/repository/maven-public/'
+	}
+}
+
+dependencies {
+	compileOnly "io.papermc.paper:paper-api:${rootProject.paper_api_version}"
+	implementation project(':core')
+}
+
+processResources {
+	inputs.property "version", project.version
+
+	filesMatching("paper-plugin.yml") {
+		expand "version": inputs.properties.version
+	}
+}
+
+jar {
+	inputs.property "archivesName", project.base.archivesName
+
+	// The shared core ships inside the plugin jar. Gson and SLF4J come with Paper.
+	from(project(':core').sourceSets.main.output)
+
+	from(rootProject.file("LICENSE")) {
+		rename { "${it}_${inputs.properties.archivesName}"}
+	}
+}

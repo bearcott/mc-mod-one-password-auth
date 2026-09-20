@@ -1,7 +1,7 @@
 package net.bearcott.passwordmod.mixin;
 
-import net.bearcott.passwordmod.AuthStorage;
-import net.bearcott.passwordmod.PlayerLockdownHandlers;
+import net.bearcott.passwordmod.AuthCore;
+import net.bearcott.passwordmod.fabric.FabricAuthPlayer;
 import net.bearcott.passwordmod.util.Messages;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -30,22 +30,17 @@ public abstract class PlayerListMixin {
             CallbackInfoReturnable<Component> cir) {
         PlayerList self = (PlayerList) (Object) this;
         ServerPlayer existing = self.getPlayer(profile.id());
-        if (existing == null)
-            return;
-        // Dead connection still in the player list — let vanilla clean up and accept the reconnect.
-        if (existing.hasDisconnected())
-            return;
-        if (AuthStorage.hasPendingSession(profile.id()))
-            return;
-        cir.setReturnValue(Component.literal(Messages.DUPLICATE_LOGIN_DENIED));
+        // A dead connection still in the player list doesn't count — let vanilla clean up and
+        // accept the reconnect.
+        boolean existingOnline = existing != null && !existing.hasDisconnected();
+        if (AuthCore.shouldDenyDuplicateLogin(profile.id(), existingOnline))
+            cir.setReturnValue(Component.literal(Messages.DUPLICATE_LOGIN_DENIED));
     }
 
     // remove() saves the player's data before anything else; put their real state back first so
     // the lockdown is never written to their playerdata or ops.json.
     @Inject(method = "remove", at = @At("HEAD"))
     private void onePasswordAuth$suspendLockdownBeforeSave(ServerPlayer player, CallbackInfo ci) {
-        AuthStorage.PlayerSession session = AuthStorage.getPendingSession(player.getUUID());
-        if (session != null)
-            PlayerLockdownHandlers.suspendLockdown(player, session);
+        AuthCore.beforePlayerSaved(new FabricAuthPlayer(player));
     }
 }

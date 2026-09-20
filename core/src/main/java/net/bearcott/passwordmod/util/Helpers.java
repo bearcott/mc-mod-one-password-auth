@@ -9,7 +9,7 @@ import java.security.SecureRandom;
 import java.util.UUID;
 
 import net.bearcott.passwordmod.AuthStorage;
-import net.bearcott.passwordmod.PasswordMod;
+import net.bearcott.passwordmod.AuthCore;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
@@ -72,7 +72,7 @@ public class Helpers {
     }
 
     public static String getSassyMessage(int attempt, String input) {
-        String prefix = "§e§l[failed " + attempt + "/" + PasswordMod.MAX_ATTEMPTS + "] §f";
+        String prefix = "§e§l[failed " + attempt + "/" + AuthCore.MAX_ATTEMPTS + "] §f";
         return switch (attempt) {
             case 1 -> prefix + "Uh oh! Did you forget your own password? Try again.";
             case 2 -> prefix + "Is this a new server? Try \"§d§lPassWord123§f\"";

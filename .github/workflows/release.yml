@@ -1,4 +1,6 @@
 # Automatically builds and publishes a release when a new tag is pushed.
+# One tag builds both jars (Fabric mod + Paper plugin) and publishes them as two versions of the
+# same Modrinth project: X.Y.Z for Fabric and X.Y.Z+paper for Paper/Purpur.
 # NOTE: Set up MODRINTH_TOKEN and MODRINTH_PROJECT_ID in the repository secrets and variables respectively before using this workflow.
 # commit changes then push via `git tag v1.0.* && git push origin v1.0.*`
 
@@ -32,23 +34,26 @@ jobs:
         id: version
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
 
-      - name: Build mod
+      - name: Build mod and plugin
         env:
           MOD_VERSION: ${{ steps.version.outputs.VERSION }}
         run: ./gradlew build
 
-      - name: Find JAR
+      - name: Find JARs
         id: jar
         run: |
-          JAR=$(ls build/libs/*.jar | grep -v '\-dev\|-sources\|-shadow' | head -n 1)
-          echo "PATH=$JAR" >> $GITHUB_OUTPUT
-          echo "NAME=$(basename $JAR)" >> $GITHUB_OUTPUT
+          FABRIC=$(ls fabric/build/libs/*.jar | grep -v '\-dev\|-sources\|-shadow' | head -n 1)
+          PAPER=$(ls paper/build/libs/*.jar | grep -v '\-dev\|-sources\|-shadow' | head -n 1)
+          echo "FABRIC=$FABRIC" >> $GITHUB_OUTPUT
+          echo "PAPER=$PAPER" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: "v${{ steps.version.outputs.VERSION }}"
-          files: ${{ steps.jar.outputs.PATH }}
+          files: |
+            ${{ steps.jar.outputs.FABRIC }}
+            ${{ steps.jar.outputs.PAPER }}
           generate_release_notes: true
 
       - name: Extract Game Version from Properties
@@ -57,16 +62,34 @@ jobs:
           VERSION=$(grep 'minecraft_version' gradle.properties | cut -d'=' -f2 | tr -d '[:space:]')
           echo "GAME_VERSION=$VERSION" >> $GITHUB_OUTPUT
 
-      - name: Publish to GitHub & Modrinth
+      - name: Publish Fabric mod to Modrinth
         uses: Kir-Antipov/mc-publish@v3.3
         with:
           modrinth-id: ${{ vars.MODRINTH_PROJECT_ID }}
           modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
-          files: ${{ steps.jar.outputs.PATH }}
+          files: ${{ steps.jar.outputs.FABRIC }}
           version: ${{ steps.version.outputs.VERSION }}
           version-type: release
           game-versions: ${{ steps.game_version.outputs.GAME_VERSION }}
           loaders: fabric
+          java: 25
+
+      # Same project, separate version, so Modrinth's loader filter and launchers pick the right
+      # jar. Paper plugins also run on Paper forks like Purpur. Not Folia or plain Spigot: the
+      # plugin uses Paper's Brigadier command API and the global tick.
+      - name: Publish Paper plugin to Modrinth
+        uses: Kir-Antipov/mc-publish@v3.3
+        with:
+          modrinth-id: ${{ vars.MODRINTH_PROJECT_ID }}
+          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
+          files: ${{ steps.jar.outputs.PAPER }}
+          name: ${{ steps.version.outputs.VERSION }} (Paper)
+          version: ${{ steps.version.outputs.VERSION }}+paper
+          version-type: release
+          game-versions: ${{ steps.game_version.outputs.GAME_VERSION }}
+          loaders: |
+            paper
+            purpur
           java: 25
 
       - name: Sync Modrinth project description from README

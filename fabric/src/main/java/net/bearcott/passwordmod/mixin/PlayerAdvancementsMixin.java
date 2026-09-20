@@ -33,7 +33,10 @@ public abstract class PlayerAdvancementsMixin {
     private void onAdvancementAwarded(AdvancementHolder advancement, String criterionName, CallbackInfoReturnable<Boolean> cir,
                                       @Share("wasDone") LocalBooleanRef wasDone) {
         if (Boolean.TRUE.equals(cir.getReturnValue()) && !wasDone.get() && this.getOrStartProgress(advancement).isDone()) {
-            AdvancementsLogger.logAdvancement(this.player, advancement);
+            String title = advancement.value().display()
+                    .map(display -> display.getTitle().getString())
+                    .orElse(null);
+            AdvancementsLogger.logAdvancement(this.player.getName().getString(), this.player.getUUID(), title);
         }
     }
 }

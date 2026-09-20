@@ -8,3 +8,10 @@ pluginManagement {
 		gradlePluginPortal()
 	}
 }
+
+rootProject.name = 'one-password-auth'
+
+// core: platform-free logic (storage, config, webhooks, messages, lockdown decisions)
+// fabric: the Fabric mod (Loom + mixins), bundles core
+// paper: the Paper plugin, bundles core
+include 'core', 'fabric', 'paper'

@@ -1,0 +1,6 @@
+// Plain Java: no Minecraft, Fabric or Paper classes may be used here. Gson and SLF4J are
+// provided at runtime by both Minecraft (Fabric) and Paper, so they're compile-only.
+dependencies {
+	compileOnly "com.google.code.gson:gson:${rootProject.gson_version}"
+	compileOnly "org.slf4j:slf4j-api:${rootProject.slf4j_version}"
+}

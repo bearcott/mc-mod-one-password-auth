@@ -1,0 +1,6 @@
+name: OnePasswordAuth
+version: '${version}'
+main: net.bearcott.passwordmod.paper.PasswordPlugin
+api-version: '26.2'
+description: Requires everyone to enter a shared password before they can play.
+authors: [bearcott]
