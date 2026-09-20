@@ -29,8 +29,6 @@ That's it! Everything should work out of the box! The next time anyone logs in, 
 | IP + UUID whitelist | `config/one_password_auth_ip_whitelist.txt` | `plugins/OnePasswordAuth/one_password_auth_ip_whitelist.txt` |
 | Pending sessions | `config/one_password_auth_sessions.json` | `plugins/OnePasswordAuth/one_password_auth_sessions.json` |
 
-The file names and formats are identical on both, so **moving a server from Fabric to Paper is a copy**: move those three files from `config/` into `plugins/OnePasswordAuth/` and everyone stays logged in.
-
 ## ⚙️ Customization
 
 Upon first boot the plugin will generate a config file with a default password (such as `komipu42!`) and all additional customizable settings (see the table above for where it is).
