@@ -37,6 +37,17 @@ All the lines except for `password=` are optional! The server will kick everyone
 
 To change any settings, just edit the config file and restart the server.
 
+### Settings
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| `password` | generated | The shared password everyone types with `/login`. The only required line. |
+| `webhook_url` | none | Discord webhook for the player feed: joins, login attempts (including what was typed), successes, timeouts, and advancements earned after logging in. |
+| `admin_webhook_url` | none | Discord webhook for security: server start, stop and crash, every connect and disconnect, and advancements earned while still unauthenticated. |
+| `login_title` | built in | Big title on the lockdown screen. Supports `§` codes. |
+| `login_description` | built in | Subtitle under it. Supports `§` codes. |
+| `timeout_seconds` | `180` | Kick an unauthenticated player after this many seconds of inactivity. |
+
 ### Example
 
 ```properties
