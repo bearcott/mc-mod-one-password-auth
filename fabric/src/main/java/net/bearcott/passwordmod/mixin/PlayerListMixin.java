@@ -13,10 +13,17 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 
 @Mixin(PlayerList.class)
 public abstract class PlayerListMixin {
+
+    private static String onePasswordAuth$ipOf(SocketAddress address) {
+        if (address instanceof InetSocketAddress isa && isa.getAddress() != null)
+            return isa.getAddress().getHostAddress();
+        return String.valueOf(address);
+    }
 
     // Reject a new connection when an authenticated session for the same UUID is
     // already online. If the existing connection is still in lockdown, fall through
@@ -28,6 +35,13 @@ public abstract class PlayerListMixin {
             SocketAddress address,
             NameAndId profile,
             CallbackInfoReturnable<Component> cir) {
+        // Anti-flood gate first: refuse connections from an IP that's flooding, before any other
+        // work. Keyed by IP so it survives reconnects.
+        if (!AuthCore.onIncomingConnection(onePasswordAuth$ipOf(address))) {
+            cir.setReturnValue(Component.literal(Messages.CONNECTION_THROTTLED));
+            return;
+        }
+
         PlayerList self = (PlayerList) (Object) this;
         ServerPlayer existing = self.getPlayer(profile.id());
         // A dead connection still in the player list doesn't count — let vanilla clean up and

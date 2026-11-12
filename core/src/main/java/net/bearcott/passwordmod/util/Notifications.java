@@ -4,6 +4,8 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 
@@ -45,9 +47,7 @@ public class Notifications {
                         + (loc != null && ip != null
                                 ? String.format(Messages.WEBHOOK_IP_SUFFIX_FMT, ip, loc.full())
                                 : "");
-                // Use Gson to build the payload — naive string escaping missed backslashes
-                // and control chars, which let malformed inputs break webhooks silently.
-                String body = GSON.toJson(Map.of("content", content));
+                String body = buildWebhookPayload(content);
                 sendDiscordWebhookSync(target, body);
             } catch (Exception ignored) {
             }
@@ -57,6 +57,25 @@ public class Notifications {
             workerPool.submit(send);
         else
             send.run();
+    }
+
+    /**
+     * Build the Discord webhook JSON body for {@code content}. Pure (no I/O) so it can be
+     * unit-tested. Two things it must guarantee:
+     * <ul>
+     *   <li>Gson escaping — naive string escaping missed backslashes and control chars, which let
+     *       malformed player input break webhooks silently.</li>
+     *   <li>{@code allowed_mentions: {parse: []}} — without it, a player typing {@code @everyone}
+     *       (e.g. in a /login attempt that gets logged) would actually ping the admin's Discord.
+     *       An empty parse list neutralizes the ping while keeping the literal text (we still want
+     *       to see what was typed).</li>
+     * </ul>
+     */
+    public static String buildWebhookPayload(String content) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("content", content);
+        payload.put("allowed_mentions", Map.of("parse", List.of()));
+        return GSON.toJson(payload);
     }
 
     public static void sendDiscordWebhookSync(String targetUrl, String jsonBody) {

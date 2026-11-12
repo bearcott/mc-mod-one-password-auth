@@ -27,6 +27,7 @@ public class Messages {
     public static final String FATAL_ERROR = "§cUh Oh! Something went wrong, please contact an admin...";
     public static final String LOCKDOWN_DENIED = "§cNope! :3";
     public static final String DUPLICATE_LOGIN_DENIED = "§cSomeone is already logged into this account. Try again later.";
+    public static final String CONNECTION_THROTTLED = "§cToo many connection attempts — please wait a moment.";
 
     // ============ Kick messages ============
 

@@ -3,4 +3,15 @@
 dependencies {
 	compileOnly "com.google.code.gson:gson:${rootProject.gson_version}"
 	compileOnly "org.slf4j:slf4j-api:${rootProject.slf4j_version}"
+
+	// Tests run the pure-Java core directly (no Minecraft). Gson/slf4j are compileOnly for main,
+	// so the test source set needs them on its own classpath.
+	testImplementation "org.junit.jupiter:junit-jupiter:5.11.3"
+	testImplementation "com.google.code.gson:gson:${rootProject.gson_version}"
+	testImplementation "org.slf4j:slf4j-simple:${rootProject.slf4j_version}"
+	testRuntimeOnly "org.junit.platform:junit-platform-launcher"
+}
+
+test {
+	useJUnitPlatform()
 }

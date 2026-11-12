@@ -1,6 +1,7 @@
 package net.bearcott.passwordmod.paper;
 
 import com.destroystokyo.paper.event.server.ServerTickEndEvent;
+import com.google.common.net.InetAddresses;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import io.papermc.paper.command.brigadier.Commands;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
@@ -109,6 +110,15 @@ public class PasswordPlugin extends JavaPlugin implements Listener {
     public void onPreLogin(AsyncPlayerPreLoginEvent event) {
         if (event.getLoginResult() != AsyncPlayerPreLoginEvent.Result.ALLOWED)
             return;
+
+        // Anti-flood gate first: refuse connections from an IP that's flooding. Keyed by IP (same
+        // formatting as PaperAuthPlayer.ip()) so it survives reconnects. Mirrors the Fabric mixin.
+        String ip = InetAddresses.toAddrString(event.getAddress());
+        if (!AuthCore.onIncomingConnection(ip)) {
+            event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER, PaperAuthPlayer.text(Messages.CONNECTION_THROTTLED));
+            return;
+        }
+
         UUID uuid = event.getUniqueId();
         boolean existingOnline;
         try {

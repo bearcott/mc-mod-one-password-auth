@@ -8,6 +8,9 @@ import java.net.URL;
 import java.security.SecureRandom;
 import java.util.UUID;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
 import net.bearcott.passwordmod.AuthStorage;
 import net.bearcott.passwordmod.AuthCore;
 
@@ -39,24 +42,79 @@ public class Helpers {
     }
 
     public static Location fetchLocationData(String ip) {
+        // Best-effort and privacy-respecting: a blank geolocation_url disables third-party lookups.
+        String base = AuthStorage.geolocationUrl;
+        if (base == null || base.isBlank())
+            return Location.unknown();
         try {
-            URL url = URI.create("http://ip-api.com/csv/" + ip.split(":")[0].replace("/", "") + "?fields=city,country")
-                    .toURL();
+            // Reduce to a bare IP for the lookup. Handles IPv4, IPv4:port, bare IPv6, [IPv6]:port
+            // and Java's "host/ip" prefix — crucially NOT truncating IPv6 at its first colon.
+            String cleanIp = stripToHostAddress(ip);
+            String endpoint = base.endsWith("/") ? base + cleanIp : base + "/" + cleanIp;
+            URL url = URI.create(endpoint).toURL(); // HTTPS by default (https://ipwho.is/<ip>)
             HttpURLConnection c = (HttpURLConnection) url.openConnection();
             c.setConnectTimeout(LOCATION_LOOKUP_TIMEOUT_MS);
             c.setReadTimeout(LOCATION_LOOKUP_TIMEOUT_MS);
             try (BufferedReader r = new BufferedReader(new InputStreamReader(c.getInputStream(), UTF_8))) {
-                String l = r.readLine();
-                if (l != null && l.contains(",")) {
-                    String[] pts = l.split(",");
-                    return new Location(pts[1].trim(), pts[0].trim());
-                }
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = r.readLine()) != null)
+                    sb.append(line);
+                return parseLocationJson(sb.toString());
             } finally {
                 c.disconnect();
             }
         } catch (Exception ignored) {
         }
         return Location.unknown();
+    }
+
+    /**
+     * Parse an ipwho.is-shaped JSON body ({@code {"success":true,"city":"...","country":"..."}})
+     * into a {@link Location}. Pure (no I/O) for unit testing. Any malformed/empty input or an
+     * explicit {@code "success":false} yields {@link Location#unknown()}.
+     */
+    public static Location parseLocationJson(String json) {
+        try {
+            JsonObject o = JsonParser.parseString(json).getAsJsonObject();
+            if (o.has("success") && !o.get("success").getAsBoolean())
+                return Location.unknown();
+            String city = stringOrNull(o, "city");
+            String country = stringOrNull(o, "country");
+            if (city == null && country == null)
+                return Location.unknown();
+            return new Location(city != null ? city : "Unknown", country != null ? country : "Location");
+        } catch (Exception ignored) {
+            return Location.unknown();
+        }
+    }
+
+    private static String stringOrNull(JsonObject o, String key) {
+        return (o.has(key) && !o.get(key).isJsonNull()) ? o.get(key).getAsString() : null;
+    }
+
+    /**
+     * Reduce a connection-address string to a bare IP for a geolocation lookup. Handles the forms
+     * the platform may hand us — a clean IPv4/IPv6, Java's "host/ip" or "/ip" prefix, an
+     * "IPv4:port", and a bracketed "[ipv6]:port" — and, unlike a naive split on ':', returns a bare
+     * IPv6 address (multiple colons, no brackets) unchanged instead of truncating it at the first.
+     */
+    public static String stripToHostAddress(String ip) {
+        if (ip == null)
+            return "";
+        String s = ip.trim();
+        int slash = s.lastIndexOf('/'); // "hostname/1.2.3.4" or "/1.2.3.4"
+        if (slash >= 0)
+            s = s.substring(slash + 1);
+        if (s.startsWith("[")) { // "[2001:db8::1]:5678"
+            int end = s.indexOf(']');
+            if (end > 0)
+                return s.substring(1, end);
+        }
+        int first = s.indexOf(':');
+        if (first >= 0 && first == s.lastIndexOf(':')) // exactly one ':' => IPv4:port
+            return s.substring(0, first);
+        return s; // IPv4 (no port) or bare IPv6 (multiple colons)
     }
 
     public static boolean isRateLimited(UUID uuid) {

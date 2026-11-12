@@ -4,6 +4,7 @@ import net.bearcott.passwordmod.util.Helpers;
 import net.bearcott.passwordmod.util.Messages;
 import net.bearcott.passwordmod.util.Notifications;
 import net.bearcott.passwordmod.util.Notifications.Target;
+import net.bearcott.passwordmod.util.RateLimiter;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,8 +26,14 @@ public final class AuthCore {
     public static final int MAX_ATTEMPTS = 7;
     private static final int REMINDER_INTERVAL_TICKS = 80; // 4 seconds at 20 TPS
     private static final int SHUTDOWN_TIMEOUT_SECONDS = 5;
+    // ~60s at 20 TPS: how often to sweep stale per-IP rate-limiter state. Not per tick (no alloc).
+    private static final int RATE_LIMIT_CLEANUP_INTERVAL_TICKS = 1200;
 
     public static final ExecutorService WORKER_POOL = Executors.newCachedThreadPool(namedDaemonFactory());
+
+    // Shared per-IP rate limiter: connection anti-flood gate + per-IP /login attempt speed cap.
+    // Keyed by IP so both controls survive reconnects.
+    public static final RateLimiter RATE_LIMITER = new RateLimiter();
 
     private AuthCore() {
     }
@@ -45,8 +52,11 @@ public final class AuthCore {
         if (!AuthStorage.hasPendingSession(player.uuid()))
             return 0;
 
-        // prevent player from sending too many attempts in a short time
-        if (Helpers.isRateLimited(player.uuid())) {
+        // Prevent too many attempts in a short time. The per-IP attempt throttle is the real
+        // brute-force speed cap (it survives reconnects); the per-session check is kept as a
+        // cheap first line. Short-circuit so a blocked attempt doesn't advance the per-IP clock.
+        if (Helpers.isRateLimited(player.uuid())
+                || !RATE_LIMITER.tryAcquireLoginAttempt(player.ip(), System.currentTimeMillis())) {
             player.sendMessage(Messages.RATE_LIMITED);
             return 0;
         }
@@ -61,8 +71,21 @@ public final class AuthCore {
         PlayerLockdownHandlers.handlePlayerJoin(player, WORKER_POOL);
     }
 
+    /**
+     * The connection anti-flood gate, called at the door before a player is admitted. Returns true
+     * if the connection from {@code ip} is allowed, false if it should be refused for flooding.
+     * Kept here (not in the mixin/listener) so it's platform-free and unit-testable.
+     */
+    public static boolean onIncomingConnection(String ip) {
+        return RATE_LIMITER.tryAcquireConnection(ip, System.currentTimeMillis());
+    }
+
     /** Runs at the end of every server tick with a snapshot of the online players. */
     public static void onTick(List<? extends AuthPlayer> players, int tickCount) {
+        // Periodically sweep stale per-IP rate-limiter state so the table can't grow unbounded.
+        if (tickCount % RATE_LIMIT_CLEANUP_INTERVAL_TICKS == 0)
+            RATE_LIMITER.cleanup(System.currentTimeMillis());
+
         for (AuthPlayer player : players) {
             // 1.21.x safety: skip players already gone
             if (player.hasDisconnected())

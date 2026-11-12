@@ -24,6 +24,12 @@ public class AuthStorage {
 
     private static final int SHUTDOWN_TIMEOUT_SECONDS = 5;
 
+    // Upper bound on simultaneously-pending (unauthenticated) sessions kept in memory and on disk.
+    // Without it an attacker joining with many unique usernames/UUIDs grows SESSIONS (and the JSON
+    // file) without bound. Evicting a pending session is safe: the player's real state is already
+    // restored into their playerdata on disconnect, so a rejoin just re-snapshots correctly.
+    public static final int MAX_PENDING_SESSIONS = 2000;
+
     private static final Set<String> whitelistedPairs = new HashSet<>();
     private static final Map<UUID, PlayerSession> SESSIONS = new ConcurrentHashMap<>();
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -44,6 +50,8 @@ public class AuthStorage {
     public static String loginTitle;
     public static String loginDescription;
     public static int timeoutSec;
+    // Base URL for best-effort IP geolocation. Blank disables third-party IP lookups entirely.
+    public static String geolocationUrl;
 
     public static class PlayerSession {
         // Persistent fields (saved to JSON)
@@ -129,6 +137,7 @@ public class AuthStorage {
             loginTitle = props.getProperty("login_title", Messages.LOGIN_DEFAULT_TITLE);
             loginDescription = props.getProperty("login_description", Messages.LOGIN_DEFAULT_DESCRIPTION);
             timeoutSec = Helpers.numberOrDefault(props.getProperty("timeout_seconds"), 180);
+            geolocationUrl = props.getProperty("geolocation_url", "https://ipwho.is/");
 
             if (serverPassword.isEmpty()) {
                 AuthCore.LOGGER.error(
@@ -183,6 +192,10 @@ public class AuthStorage {
                 #
                 # timeout_seconds
                 #   Kick unauthenticated players after this many seconds of inactivity.
+                #
+                # geolocation_url
+                #   Base URL for best-effort IP geolocation (shown in Discord logs). HTTPS.
+                #   Leave blank to disable third-party IP lookups entirely.
 
                 password=%s
                 webhook_url=
@@ -190,11 +203,15 @@ public class AuthStorage {
                 login_title=§6Welcome and Incredible!
                 login_description=§7Identify yourself or perish.
                 timeout_seconds=180
+                geolocation_url=https://ipwho.is/
                 """.formatted(generatedPassword);
         Files.writeString(CONFIG_PATH, content, StandardCharsets.UTF_8);
+        // Do NOT log the generated password: server logs are often shared/retained, which would
+        // leak the shared secret. Point admins at the config file to view or change it instead.
         AuthCore.LOGGER.info(
-                "No config file found — generated default /login password: {}  (edit {} to change it)",
-                generatedPassword, CONFIG_PATH);
+                "No config file found — generated a random default /login password. "
+                + "Open {} to view or change it.",
+                CONFIG_PATH);
     }
 
     // --------- Session Management ---------
@@ -210,19 +227,70 @@ public class AuthStorage {
         PlayerSession previous = SESSIONS.putIfAbsent(uuid, ps);
         if (previous != null)
             return previous;
-        // Durable save before returning: the caller will mutate the player's vanilla state
-        // (setGameMode/invuln/blindness) next, so the session file must already reflect the
-        // true originalMode. Otherwise a crash between mutation and the next async save
-        // would leave vanilla playerdata in lockdown-state but no session on disk, and the
-        // next join would snapshot SPECTATOR as originalMode, stranding the player.
-        // Route through SAVE_EXECUTOR so this write is serialized with any in-flight async
-        // saves — two concurrent FileWriter truncates would interleave and corrupt the JSON.
-        saveSessionsToFileBlocking();
+
+        // A genuinely new pending session: keep the store bounded so a flood of unique UUIDs
+        // can't grow memory/the JSON file without limit. Evict the oldest pending session(s)
+        // (by joinTime) once over the cap — safe because a disconnect already restored each
+        // player's real state into their playerdata, so a rejoin re-snapshots correctly.
+        if (SESSIONS.size() > MAX_PENDING_SESSIONS)
+            evictOldestPendingSessions(uuid);
+
+        // Persist asynchronously (non-blocking). We deliberately do NOT block the main server
+        // thread on disk I/O here: saveSessionsToFileBlocking() called .get() on every join,
+        // which a join-flood could weaponise into a trivial main-thread-stall DoS. We accept
+        // the tiny crash-window-vs-correctness tradeoff (a crash in the narrow gap between this
+        // call and the async write landing could lose the just-created session). The
+        // single-threaded SAVE_EXECUTOR still serializes writes, so concurrent truncates can't
+        // interleave and corrupt the JSON.
+        saveSessionsToFileAsync();
         return ps;
+    }
+
+    /** Evict oldest-by-joinTime pending sessions until back within MAX_PENDING_SESSIONS. */
+    private static void evictOldestPendingSessions(UUID keep) {
+        while (SESSIONS.size() > MAX_PENDING_SESSIONS) {
+            UUID oldest = null;
+            long oldestTime = Long.MAX_VALUE;
+            for (Map.Entry<UUID, PlayerSession> e : SESSIONS.entrySet()) {
+                if (e.getKey().equals(keep))
+                    continue;
+                if (e.getValue().joinTime < oldestTime) {
+                    oldestTime = e.getValue().joinTime;
+                    oldest = e.getKey();
+                }
+            }
+            if (oldest == null)
+                break;
+            SESSIONS.remove(oldest);
+        }
     }
 
     public static PlayerSession getPendingSession(UUID uuid) {
         return SESSIONS.get(uuid);
+    }
+
+    /** Test seam: clear in-memory state so tests in a shared JVM don't contaminate each other. */
+    static void clearInMemoryStateForTests() {
+        SESSIONS.clear();
+        whitelistedPairs.clear();
+    }
+
+    /** Test seam: number of pending sessions currently held in memory. */
+    static int pendingSessionCount() {
+        return SESSIONS.size();
+    }
+
+    /**
+     * Test seam: block until all queued async saves have run. Tests call this before their
+     * {@code @TempDir} is deleted so a background write can't race the directory cleanup (and so a
+     * trailing save can't clobber the next test's file, since SESSIONS_FILE is static).
+     */
+    static void flushSavesForTests() {
+        try {
+            SAVE_EXECUTOR.submit(() -> {
+            }).get();
+        } catch (Exception ignored) {
+        }
     }
 
     public static boolean hasPendingSession(UUID uuid) {
@@ -273,6 +341,10 @@ public class AuthStorage {
             Map<UUID, PlayerSession> loaded = GSON.fromJson(r, new TypeToken<Map<UUID, PlayerSession>>() {
             }.getType());
             if (loaded != null) {
+                // A previously-bloated file must not re-bloat memory on boot: if it holds more
+                // than the cap, keep only the newest MAX_PENDING_SESSIONS (by joinTime).
+                if (loaded.size() > MAX_PENDING_SESSIONS)
+                    loaded = pruneToNewest(loaded);
                 // Gson bypasses constructors/field initializers via Unsafe, so transient
                 // fields load as JVM defaults (ticksUntilKick=0 not -1, ipLocation=null).
                 // Reset each to safe defaults before publishing to avoid instant-kick + NPE
@@ -288,6 +360,16 @@ public class AuthStorage {
         } catch (Exception e) {
             AuthCore.LOGGER.error("Failed to load sessions from {}", SESSIONS_FILE, e);
         }
+    }
+
+    /** Keep only the newest MAX_PENDING_SESSIONS entries (by joinTime), dropping the oldest. */
+    private static Map<UUID, PlayerSession> pruneToNewest(Map<UUID, PlayerSession> loaded) {
+        Map<UUID, PlayerSession> kept = new LinkedHashMap<>();
+        loaded.entrySet().stream()
+                .sorted((a, b) -> Long.compare(b.getValue().joinTime, a.getValue().joinTime))
+                .limit(MAX_PENDING_SESSIONS)
+                .forEach(e -> kept.put(e.getKey(), e.getValue()));
+        return kept;
     }
 
     public static void saveSessionsToFile() {
