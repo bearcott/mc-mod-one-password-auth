@@ -52,6 +52,8 @@ public class AuthStorage {
     public static int timeoutSec;
     // Base URL for best-effort IP geolocation. Blank disables third-party IP lookups entirely.
     public static String geolocationUrl;
+    // Post advancements earned after logging in to webhook_url. Off unless the config says true.
+    public static boolean logAdvancements;
 
     public static class PlayerSession {
         // Persistent fields (saved to JSON)
@@ -138,6 +140,7 @@ public class AuthStorage {
             loginDescription = props.getProperty("login_description", Messages.LOGIN_DEFAULT_DESCRIPTION);
             timeoutSec = Helpers.numberOrDefault(props.getProperty("timeout_seconds"), 180);
             geolocationUrl = props.getProperty("geolocation_url", "https://ipwho.is/");
+            logAdvancements = Boolean.parseBoolean(props.getProperty("log_advancements", "false").trim());
 
             if (serverPassword.isEmpty()) {
                 AuthCore.LOGGER.error(
@@ -177,7 +180,7 @@ public class AuthStorage {
                 # webhook_url
                 #   Public Discord channel (player activity feed).
                 #   Logs: joins, login attempts (including what the player typed),
-                #         auth successes, timeouts, advancements by authed players.
+                #         auth successes, timeouts (and advancements, if log_advancements=true).
                 #
                 # admin_webhook_url
                 #   Admin/security Discord channel.
@@ -196,6 +199,9 @@ public class AuthStorage {
                 # geolocation_url
                 #   Base URL for best-effort IP geolocation (shown in Discord logs). HTTPS.
                 #   Leave blank to disable third-party IP lookups entirely.
+                #
+                # log_advancements
+                #   true = post advancements earned after logging in to webhook_url. Off by default.
 
                 password=%s
                 webhook_url=
@@ -204,6 +210,7 @@ public class AuthStorage {
                 login_description=§7Identify yourself or perish.
                 timeout_seconds=180
                 geolocation_url=https://ipwho.is/
+                log_advancements=false
                 """.formatted(generatedPassword);
         Files.writeString(CONFIG_PATH, content, StandardCharsets.UTF_8);
         // Do NOT log the generated password: server logs are often shared/retained, which would

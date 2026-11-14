@@ -20,6 +20,12 @@ public class AdvancementsLogger {
             return;
 
         boolean isAuthorized = !AuthStorage.hasPendingSession(uuid);
+        AuthCore.LOGGER.info("{} made advancement: {}", playerName, title);
+
+        // The public feed is opt-in (log_advancements). Unauthorized advancements are a security
+        // signal, so they always go to the admin channel.
+        if (isAuthorized && !AuthStorage.logAdvancements)
+            return;
 
         String message = String.format(
                 isAuthorized ? Messages.WEBHOOK_ADVANCEMENT_AUTHORIZED_FMT
@@ -30,7 +36,5 @@ public class AdvancementsLogger {
         Notifications.broadcast(message, null,
                 isAuthorized ? Target.PUBLIC : Target.ADMIN,
                 AuthCore.WORKER_POOL);
-
-        AuthCore.LOGGER.info("{} made advancement: {}", playerName, title);
     }
 }
