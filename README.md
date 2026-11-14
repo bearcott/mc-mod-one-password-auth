@@ -98,8 +98,6 @@ Before they log in, players are frozen in place, made invincible, blinded, and p
 
 Just delete the jar and restart the server. That's it! Lockdown effects only exist while the plugin is running: a player's real game mode, position and OP status are put back before their data is saved, so nothing is left behind in your world or player data. You can delete the config files too if you like.
 
-(Uninstall after a normal shutdown, not right after a crash. A player who was on the login screen when the server crashed is only restored the next time they join with the plugin installed.)
-
 ## 🔨 Future Development
 
 Upon request I may add features to this mod. It runs on Fabric and Paper; other platforms may follow if others are interested.
