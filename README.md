@@ -94,6 +94,12 @@ Before they log in, players are frozen in place, made invincible, blinded, and p
 - **Bruteforcing** — a per-IP minimum interval between `/login` attempts caps brute-force speed; still kicked after 7 tries and kicked if idle too long. The per-IP throttle is keyed by IP, so it survives reconnects (you can't reset it by rejoining).
 - **Connection flooding (DoS)** — a per-IP connection rate limit (token bucket) refuses connection floods at the door, and it too survives reconnects. The pending-session store is bounded and persisted off the main thread, so a flood of unique joins can't stall the server or grow memory/the session file without limit.
 
+## 🗑️ Uninstalling
+
+Just delete the jar and restart the server. That's it! Lockdown effects only exist while the plugin is running: a player's real game mode, position and OP status are put back before their data is saved, so nothing is left behind in your world or player data. You can delete the config files too if you like.
+
+(Uninstall after a normal shutdown, not right after a crash. A player who was on the login screen when the server crashed is only restored the next time they join with the plugin installed.)
+
 ## 🔨 Future Development
 
 Upon request I may add features to this mod. It runs on Fabric and Paper; other platforms may follow if others are interested.
